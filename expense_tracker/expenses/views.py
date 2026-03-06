@@ -11,11 +11,40 @@ from decimal import Decimal
 import csv
 from io import TextIOWrapper
 from django.contrib import messages
-from django.db.models import Sum
+from django.db.models import Sum, Q
 import plotly.graph_objects as go
 from plotly.offline import plot
 from django.db.models.functions import TruncMonth
 from collections import defaultdict
+
+
+def categorize_expense_by_description(description, user):
+    """
+    Match an expense text to a category using keyword matching.
+    
+    Returns:
+        (category_obj, matched_keyword) if match found
+        (None, None) if no match
+    """
+    if not description or not description.strip():
+        return None, None
+    
+    description_lower = description.lower()
+    
+    # Get all categories (system + user's custom)
+    categories = Category.objects.filter(
+        Q(is_system=True) | Q(user=user)
+    ).exclude(keywords='')
+    
+    # Try to find a matching category
+    for category in categories:
+        keywords = category.get_keywords_list()
+        for keyword in keywords:
+            if keyword in description_lower:
+                return category, keyword
+    
+    return None, None
+
 
 
 def _create_cumulative_graph(user):
@@ -309,35 +338,56 @@ def upload_csv(request):
         if form.is_valid():
             csv_file = TextIOWrapper(request.FILES["file"].file, encoding="utf-8")
             reader = csv.DictReader(csv_file, delimiter=";")
-            count = 0
+            
+            # Track results
+            total_count = 0
+            categorized_count = 0
+            uncategorized_expenses = []
+            
             for row in reader:
                 # Adjust these keys to match your CSV columns
                 row["Määrä EUROA"] = row["Määrä EUROA"].replace(",", ".")
                 
-                # Try to link to category object, create if needed
-                category_obj = None
-                if "Selitys" in row:
-                    category_name = row["Selitys"]
-                    category_obj, _ = Category.objects.get_or_create(
-                        name=category_name,
-                        defaults={'is_system': False, 'user': request.user}
-                    )
+                # Use receiver/payee as primary signal for matching; fallback to description.
+                receiver = row.get("Saaja/Maksaja", "")
+                description = row.get("Viesti", "")
+                match_text = receiver.strip() or description
+                category_obj, matched_keyword = categorize_expense_by_description(match_text, request.user)
+                
+                if category_obj:
+                    categorized_count += 1
+                else:
+                    # Track uncategorized expenses for feedback
+                    uncategorized_expenses.append({
+                        'date': row.get("Arvopäivä", ""),
+                        'receiver': receiver,
+                        'description': description,
+                        'amount': row.get("Määrä EUROA", ""),
+                    })
                 
                 amount = Decimal(row["Määrä EUROA"])
                 expense = Expense(
                     user=request.user,
                     date=row["Arvopäivä"],
-                    category=row.get("Selitys", ""),
-                    category_obj=category_obj,
-                    description=row.get("Viesti", ""),
+                    category=row.get("Selitys", ""),  # Keep for reference
+                    category_obj=category_obj,  # NEW: Smart matched category
+                    description=description,
                     amount=amount,
-                    receiver=row.get("Saaja/Maksaja", ""),
+                    receiver=receiver,
                 )
                 # user_share will be auto-set by save() method
                 expense.save()
-                count += 1
-            messages.success(request, f"Successfully imported {count} expenses!")
-            return redirect("expense_list")
+                total_count += 1
+            
+            # Store results in session for import summary page
+            request.session['import_results'] = {
+                'total': total_count,
+                'categorized': categorized_count,
+                'uncategorized': total_count - categorized_count,
+                'uncategorized_expenses': uncategorized_expenses[:50],  # Limit to first 50
+            }
+            
+            return redirect("import_summary")
     else:
         form = CSVUploadForm()
     return render(request, "expenses/upload_csv.html", {"form": form})
@@ -391,6 +441,31 @@ def category_add(request):
 
 
 @login_required
+def category_edit(request, pk):
+    """Edit a category's keywords (user categories and system categories)."""
+    # Allow editing system categories or user's own categories
+    if request.user.is_staff:
+        category = get_object_or_404(Category, pk=pk)
+    else:
+        category = get_object_or_404(Category, pk=pk, user=request.user)
+    
+    if request.method == "POST":
+        form = CategoryForm(request.POST, instance=category)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Category '{category.name}' updated successfully!")
+            return redirect("category_list")
+    else:
+        form = CategoryForm(instance=category)
+    
+    return render(
+        request,
+        "expenses/category_form.html",
+        {"form": form, "title": f"Edit Category: {category.name}"},
+    )
+
+
+@login_required
 def category_delete(request, pk):
     """Delete a custom category (system categories can't be deleted)."""
     category = get_object_or_404(Category, pk=pk, user=request.user)
@@ -410,3 +485,25 @@ def category_delete(request, pk):
         "expenses/category_confirm_delete.html",
         {"category": category},
     )
+
+
+@login_required
+def import_summary(request):
+    """Display import results with categorization summary."""
+    import_results = request.session.get('import_results', {
+        'total': 0,
+        'categorized': 0,
+        'uncategorized': 0,
+        'uncategorized_expenses': [],
+    })
+    shown_uncategorized = len(import_results.get('uncategorized_expenses', []))
+    extra_uncategorized = max(0, import_results.get('uncategorized', 0) - shown_uncategorized)
+    
+    # Clear from session after display
+    if 'import_results' in request.session:
+        del request.session['import_results']
+    
+    return render(request, "expenses/import_summary.html", {
+        "import_results": import_results,
+        "extra_uncategorized": extra_uncategorized,
+    })

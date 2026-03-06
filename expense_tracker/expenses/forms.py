@@ -61,8 +61,15 @@ class ExpenseForm(forms.ModelForm):
 class CategoryForm(forms.ModelForm):
     class Meta:
         model = Category
-        fields = ["name"]
+        fields = ["name", "keywords"]
         help_text = "Create a new custom category"
+        widgets = {
+            "keywords": forms.Textarea(attrs={
+                "rows": 3,
+                "placeholder": "Comma-separated keywords for automatic matching (e.g., lidl,prisma,market)"
+            }),
+        }
+
 
 
 class CSVUploadForm(forms.Form):

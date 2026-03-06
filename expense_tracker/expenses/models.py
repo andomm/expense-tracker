@@ -8,6 +8,7 @@ class Category(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=100)
     is_system = models.BooleanField(default=False)
+    keywords = models.TextField(blank=True, help_text="Comma-separated keywords for auto-matching expenses (e.g., 'lidl,prisma,k-market')")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -16,6 +17,12 @@ class Category(models.Model):
 
     def __str__(self):
         return self.name
+    
+    def get_keywords_list(self):
+        """Return keywords as a list of lowercase strings."""
+        if not self.keywords:
+            return []
+        return [kw.strip().lower() for kw in self.keywords.split(',')]
 
 
 class ExpenseSplitRule(models.Model):
