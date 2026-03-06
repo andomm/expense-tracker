@@ -1,8 +1,8 @@
 from django.shortcuts import get_object_or_404, render, redirect
 
-from .forms import ExpenseForm, CSVUploadForm, SortForm
+from .forms import ExpenseForm, CSVUploadForm, SortForm, CategoryForm
 
-from .models import Expense
+from .models import Expense, Category, ExpenseSplitRule
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login
@@ -23,7 +23,7 @@ def _create_cumulative_graph(user):
     daily_totals = (
         Expense.objects.filter(user=user, amount__lt=0)
         .values("date")
-        .annotate(total_spent=Sum("amount"))
+        .annotate(total_spent=Sum("user_share"))
         .order_by("date")
     )
 
@@ -66,7 +66,7 @@ def _create_monthly_comparison(user):
         Expense.objects.filter(user=user, amount__lt=0)
         .annotate(month=TruncMonth("date"))
         .values("month")
-        .annotate(total_spent=Sum("amount"))
+        .annotate(total_spent=Sum("user_share"))
         .order_by("month")
     )
 
@@ -97,8 +97,8 @@ def _create_category_breakdown(user):
     """Create category-based pie chart."""
     category_totals = (
         Expense.objects.filter(user=user, amount__lt=0)
-        .values("category")
-        .annotate(total_spent=Sum("amount"))
+        .values("category_obj__name")
+        .annotate(total_spent=Sum("user_share"))
         .order_by("-total_spent")
     )
 
@@ -106,7 +106,8 @@ def _create_category_breakdown(user):
     amounts = []
     
     for item in category_totals:
-        categories.append(item["category"])
+        cat_name = item["category_obj__name"] or "Uncategorized"
+        categories.append(cat_name)
         amounts.append(abs(item["total_spent"]))
 
     fig = go.Figure()
@@ -127,7 +128,7 @@ def _create_income_vs_expenses(user):
     daily_totals = (
         Expense.objects.filter(user=user)
         .values("date")
-        .annotate(total=Sum("amount"))
+        .annotate(total=Sum("user_share"))
         .order_by("date")
     )
 
@@ -144,11 +145,11 @@ def _create_income_vs_expenses(user):
         
         day_expenses = (
             Expense.objects.filter(user=user, date=item["date"], amount__lt=0)
-            .aggregate(total=Sum("amount"))["total"] or 0
+            .aggregate(total=Sum("user_share"))["total"] or 0
         )
         day_income = (
             Expense.objects.filter(user=user, date=item["date"], amount__gt=0)
-            .aggregate(total=Sum("amount"))["total"] or 0
+            .aggregate(total=Sum("user_share"))["total"] or 0
         )
         
         expenses_cumsum += abs(day_expenses)
@@ -220,12 +221,12 @@ def expense_list(request):
         order_by = form.cleaned_data.get("order_by") or "-date"
 
     expenses = Expense.objects.filter(user=request.user).order_by(order_by)
-    # Only sum minus amount expenses
-    total_spent = sum(expense.amount for expense in expenses if expense.amount < 0)
-    income = sum(expense.amount for expense in expenses if expense.amount > 0)
+    # Use user_share for accurate personal calculations
+    total_spent = sum(expense.user_share for expense in expenses if expense.user_share and expense.amount < 0)
+    income = sum(expense.user_share for expense in expenses if expense.user_share and expense.amount > 0)
     balance = total_spent + income
 
-    top_expenses = expenses.order_by("amount")[:5]
+    top_expenses = expenses.filter(amount__lt=0).order_by("amount")[:5]
 
     return render(
         request,
@@ -256,14 +257,14 @@ def signup(request):
 @login_required
 def expense_add(request):
     if request.method == "POST":
-        form = ExpenseForm(request.POST)
+        form = ExpenseForm(request.POST, user=request.user)
         if form.is_valid():
             expense = form.save(commit=False)
             expense.user = request.user
             expense.save()
             return redirect("expense_list")
     else:
-        form = ExpenseForm()
+        form = ExpenseForm(user=request.user)
     return render(
         request, "expenses/expense_form.html", {"form": form, "title": "Add Expense"}
     )
@@ -273,12 +274,12 @@ def expense_add(request):
 def expense_edit(request, pk):
     expense = get_object_or_404(Expense, pk=pk, user=request.user)
     if request.method == "POST":
-        form = ExpenseForm(request.POST, instance=expense)
+        form = ExpenseForm(request.POST, instance=expense, user=request.user)
         if form.is_valid():
             form.save()
             return redirect("expense_list")
     else:
-        form = ExpenseForm(instance=expense)
+        form = ExpenseForm(instance=expense, user=request.user)
     return render(
         request, "expenses/expense_form.html", {"form": form, "title": "Edit Expense"}
     )
@@ -312,14 +313,28 @@ def upload_csv(request):
             for row in reader:
                 # Adjust these keys to match your CSV columns
                 row["Määrä EUROA"] = row["Määrä EUROA"].replace(",", ".")
-                Expense.objects.create(
+                
+                # Try to link to category object, create if needed
+                category_obj = None
+                if "Selitys" in row:
+                    category_name = row["Selitys"]
+                    category_obj, _ = Category.objects.get_or_create(
+                        name=category_name,
+                        defaults={'is_system': False, 'user': request.user}
+                    )
+                
+                amount = Decimal(row["Määrä EUROA"])
+                expense = Expense(
                     user=request.user,
                     date=row["Arvopäivä"],
-                    category=row["Selitys"],
+                    category=row.get("Selitys", ""),
+                    category_obj=category_obj,
                     description=row.get("Viesti", ""),
-                    amount=Decimal(row["Määrä EUROA"]),
+                    amount=amount,
                     receiver=row.get("Saaja/Maksaja", ""),
                 )
+                # user_share will be auto-set by save() method
+                expense.save()
                 count += 1
             messages.success(request, f"Successfully imported {count} expenses!")
             return redirect("expense_list")
@@ -336,4 +351,62 @@ def show_expenses_amount(request):
         request,
         "expenses/total_expenses.html",
         {"total_amount": total_amount},
+    )
+
+
+@login_required
+def category_list(request):
+    """List all categories (system + user custom)."""
+    system_categories = Category.objects.filter(is_system=True)
+    user_categories = Category.objects.filter(user=request.user)
+    return render(
+        request,
+        "expenses/category_list.html",
+        {
+            "system_categories": system_categories,
+            "user_categories": user_categories,
+        },
+    )
+
+
+@login_required
+def category_add(request):
+    """Add a new custom category."""
+    if request.method == "POST":
+        form = CategoryForm(request.POST)
+        if form.is_valid():
+            category = form.save(commit=False)
+            category.user = request.user
+            category.is_system = False
+            category.save()
+            messages.success(request, f"Category '{category.name}' created successfully!")
+            return redirect("category_list")
+    else:
+        form = CategoryForm()
+    return render(
+        request,
+        "expenses/category_form.html",
+        {"form": form, "title": "Add Category"},
+    )
+
+
+@login_required
+def category_delete(request, pk):
+    """Delete a custom category (system categories can't be deleted)."""
+    category = get_object_or_404(Category, pk=pk, user=request.user)
+    
+    if category.is_system:
+        messages.error(request, "System categories cannot be deleted.")
+        return redirect("category_list")
+    
+    if request.method == "POST":
+        category_name = category.name
+        category.delete()
+        messages.success(request, f"Category '{category_name}' deleted successfully!")
+        return redirect("category_list")
+    
+    return render(
+        request,
+        "expenses/category_confirm_delete.html",
+        {"category": category},
     )

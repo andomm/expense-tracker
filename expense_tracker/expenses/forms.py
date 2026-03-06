@@ -1,5 +1,6 @@
 from django import forms
-from .models import Expense
+from django.db import models
+from .models import Expense, Category, ExpenseSplitRule
 
 
 class SortForm(forms.Form):
@@ -17,12 +18,51 @@ class SortForm(forms.Form):
 
 
 class ExpenseForm(forms.ModelForm):
+    category_obj = forms.ModelChoiceField(
+        queryset=Category.objects.all(),
+        required=False,
+        label="Category",
+        help_text="Select a category for this expense"
+    )
+    split_rule = forms.ModelChoiceField(
+        queryset=ExpenseSplitRule.objects.all(),
+        required=False,
+        label="Splitting Rule",
+        help_text="Optional: Select a split rule if this expense is shared"
+    )
+    
     class Meta:
         model = Expense
-        fields = ["date", "category", "description", "amount"]
+        fields = ["date", "description", "amount", "split_rule", "receiver"]
         widgets = {
             "date": forms.DateInput(attrs={"type": "date"}),
         }
+    
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user:
+            # Filter categories to show system categories + user's custom categories
+            self.fields['category_obj'].queryset = Category.objects.filter(
+                models.Q(is_system=True) | models.Q(user=user)
+            )
+            # Filter split rules to user's rules
+            self.fields['split_rule'].queryset = ExpenseSplitRule.objects.filter(user=user)
+    
+    def save(self, commit=True):
+        expense = super().save(commit=False)
+        if self.cleaned_data.get('category_obj'):
+            expense.category_obj = self.cleaned_data['category_obj']
+            expense.category = self.cleaned_data['category_obj'].name
+        if commit:
+            expense.save()
+        return expense
+
+
+class CategoryForm(forms.ModelForm):
+    class Meta:
+        model = Category
+        fields = ["name"]
+        help_text = "Create a new custom category"
 
 
 class CSVUploadForm(forms.Form):

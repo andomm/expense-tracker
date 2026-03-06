@@ -9,4 +9,7 @@ urlpatterns = [
     path("delete/", views.expense_delete_all, name="expense_delete_all"),
     path("upload/", views.upload_csv, name="upload_csv"),
     path('expenses-per-month/', views.expenses_per_month, name='expenses_per_month'),
+    path('categories/', views.category_list, name='category_list'),
+    path('categories/add/', views.category_add, name='category_add'),
+    path('categories/<int:pk>/delete/', views.category_delete, name='category_delete'),
 ]

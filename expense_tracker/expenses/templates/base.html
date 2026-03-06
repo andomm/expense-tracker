@@ -14,8 +14,9 @@
         <a href="{% url 'upload_csv' %}">Upload expenses</a> |
         <a href="{% url 'expense_list' %}">View Expenses</a> |
         <a href="{% url 'expense_add' %}">Add Expense</a> |
-        <a href="{% url 'expense_delete_all' %}">Delete all expenses</a> |
         <a href="{% url 'expenses_per_month' %}">Monthly Summary</a> |
+        <a href="{% url 'category_list' %}">Manage Categories</a> |
+        <a href="{% url 'expense_delete_all' %}">Delete all expenses</a> |
     </p>
     {% else %}
     <p><a href="{% url 'login' %}">Login</a> | <a href="{% url 'signup' %}">Sign Up</a></p>

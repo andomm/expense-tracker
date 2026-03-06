@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>Categories</h2>
+  <p><a href="{% url 'category_add' %}">+ Add New Category</a></p>
+
+  <h3>System Categories</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for category in system_categories %}
+        <tr>
+          <td>{{ category.name }}</td>
+          <td>System (cannot be deleted)</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="2">No system categories.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>My Custom Categories</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for category in user_categories %}
+        <tr>
+          <td>{{ category.name }}</td>
+          <td>
+            <a href="{% url 'category_delete' category.pk %}">Delete</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="2">No custom categories yet. <a href="{% url 'category_add' %}">Add one</a></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
