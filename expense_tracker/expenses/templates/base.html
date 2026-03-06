@@ -1,0 +1,27 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}Expense Tracker{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'expenses/style.css' %}">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    {% if user.is_authenticated %}
+    <p>Hi, {{ user.username }} | <a href="{% url 'logout' %}">Logout</a></p>
+    <p>
+        <a href="{% url 'upload_csv' %}">Upload expenses</a> |
+        <a href="{% url 'expense_list' %}">View Expenses</a> |
+        <a href="{% url 'expense_add' %}">Add Expense</a> |
+        <a href="{% url 'expense_delete_all' %}">Delete all expenses</a> |
+        <a href="{% url 'expenses_per_month' %}">Monthly Summary</a> |
+    </p>
+    {% else %}
+    <p><a href="{% url 'login' %}">Login</a> | <a href="{% url 'signup' %}">Sign Up</a></p>
+    {% endif %}
+    <hr>
+    {% block content %}{% endblock %}
+</body>
+
+</html>
