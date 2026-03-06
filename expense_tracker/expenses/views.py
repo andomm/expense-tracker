@@ -443,6 +443,58 @@ def category_list(request):
 
 
 @login_required
+def sync_categories(request):
+    """Apply current keyword rules to uncategorized existing expenses."""
+    if request.method != "POST":
+        messages.error(request, "Category sync must be started with the sync button.")
+        return redirect("category_list")
+
+    uncategorized_expenses = Expense.objects.filter(user=request.user, category_obj__isnull=True)
+    total_uncategorized = uncategorized_expenses.count()
+    updated_count = 0
+    updated_expenses = []
+    still_uncategorized = []
+
+    for expense in uncategorized_expenses.iterator():
+        match_text = (expense.receiver or "").strip() or (expense.description or "")
+        category_obj, matched_keyword = categorize_expense_by_description(match_text, request.user)
+        if category_obj:
+            expense.category_obj = category_obj
+            expense.category = category_obj.name
+            expense.save(update_fields=["category_obj", "category"])
+            updated_count += 1
+            if len(updated_expenses) < 50:
+                updated_expenses.append(
+                    {
+                        "date": expense.date.strftime("%Y-%m-%d"),
+                        "receiver": expense.receiver,
+                        "description": expense.description,
+                        "amount": str(expense.amount),
+                        "category": category_obj.name,
+                        "matched_keyword": matched_keyword,
+                    }
+                )
+        elif len(still_uncategorized) < 50:
+            still_uncategorized.append(
+                {
+                    "date": expense.date.strftime("%Y-%m-%d"),
+                    "receiver": expense.receiver,
+                    "description": expense.description,
+                    "amount": str(expense.amount),
+                }
+            )
+
+    request.session["sync_results"] = {
+        "total_uncategorized_before": total_uncategorized,
+        "updated_count": updated_count,
+        "remaining_uncategorized": total_uncategorized - updated_count,
+        "updated_expenses": updated_expenses,
+        "still_uncategorized": still_uncategorized,
+    }
+    return redirect("sync_summary")
+
+
+@login_required
 def category_add(request):
     """Add a new custom category."""
     if request.method == "POST":
@@ -530,3 +582,36 @@ def import_summary(request):
         "import_results": import_results,
         "extra_uncategorized": extra_uncategorized,
     })
+
+
+@login_required
+def sync_summary(request):
+    """Display category sync results with affected expenses."""
+    sync_results = request.session.get(
+        "sync_results",
+        {
+            "total_uncategorized_before": 0,
+            "updated_count": 0,
+            "remaining_uncategorized": 0,
+            "updated_expenses": [],
+            "still_uncategorized": [],
+        },
+    )
+    extra_updated = max(0, sync_results["updated_count"] - len(sync_results["updated_expenses"]))
+    extra_remaining = max(
+        0,
+        sync_results["remaining_uncategorized"] - len(sync_results["still_uncategorized"]),
+    )
+
+    if "sync_results" in request.session:
+        del request.session["sync_results"]
+
+    return render(
+        request,
+        "expenses/sync_summary.html",
+        {
+            "sync_results": sync_results,
+            "extra_updated": extra_updated,
+            "extra_remaining": extra_remaining,
+        },
+    )
