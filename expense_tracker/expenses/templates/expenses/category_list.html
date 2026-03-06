@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block content %}
+  <h2>Categories</h2>
+  <p><a href="{% url 'category_add' %}">+ Add New Category</a></p>
+  <form method="post" action="{% url 'sync_categories' %}" style="margin-bottom: 1rem;">
+    {% csrf_token %}
+    <button type="submit">Sync categories to existing uncategorized expenses</button>
+  </form>
+
+  <h3>System Categories</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Keywords (for CSV matching)</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for category in system_categories %}
+        <tr>
+          <td><strong>{{ category.name }}</strong></td>
+          <td>{{ category.get_category_type_display }}</td>
+          <td>
+            {% if category.keywords %}
+              <code>{{ category.keywords }}</code>
+            {% else %}
+              <span class="text-muted">No keywords</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if user.is_staff %}
+              <a href="{% url 'category_edit' category.pk %}">Edit Keywords</a>
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4">No system categories.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>My Custom Categories</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Keywords (for CSV matching)</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for category in user_categories %}
+        <tr>
+          <td>{{ category.name }}</td>
+          <td>{{ category.get_category_type_display }}</td>
+          <td>
+            {% if category.keywords %}
+              <code>{{ category.keywords }}</code>
+            {% else %}
+              <span class="text-muted">No keywords</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{% url 'category_edit' category.pk %}">Edit</a> |
+            <a href="{% url 'category_delete' category.pk %}">Delete</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4">No custom categories yet. <a href="{% url 'category_add' %}">Add one</a></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  
+  <style>
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    
+    table th, table td {
+      padding: 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    
+    table th {
+      background: #f5f5f5;
+      font-weight: bold;
+    }
+    
+    table tr:hover {
+      background: #f9f9f9;
+    }
+    
+    code {
+      background: #f0f0f0;
+      padding: 0.2rem 0.4rem;
+      border-radius: 3px;
+      font-family: monospace;
+      word-break: break-word;
+    }
+    
+    .text-muted {
+      color: #999;
+      font-style: italic;
+    }
+    
+    a {
+      color: #007bff;
+      text-decoration: none;
+    }
+    
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+{% endblock %}

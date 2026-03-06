@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Delete all expenses</h2>
+<p>Are you sure you want to delete all expenses?</p>
+<form method="post">
+  {% csrf_token %}
+  <button type="submit">Yes, delete</button>
+</form>
+<a href="{% url 'expense_list' %}">Cancel</a>
+{% endblock %}

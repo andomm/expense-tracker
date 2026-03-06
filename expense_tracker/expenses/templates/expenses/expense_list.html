@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h1>My Expenses</h1>
+<a href="{% url 'expense_add' %}">Add new expense</a>
+<a href="{% url 'expense_delete_all' %}">Delete all</a>
+<p> Total spent: {{ total_spent }}</p>
+<p> Income: {{ income }}</p>
+<p> Balance: {{ balance }}</p>
+<ul>
+	{% for expense in top_expenses %}
+	<li>
+		<strong>Top Expense:</strong> {{ expense.date }} - {{ expense.category_obj|default:expense.category }} - {{ expense.receiver }}:
+		{% if expense.split_rule %}
+			€{{ expense.user_share }} ({{ expense.split_rule.split_percentage }}% of €{{ expense.amount }})
+		{% else %}
+			€{{ expense.amount }}
+		{% endif %}
+	</li>
+	{% endfor %}
+</ul>
+<form method="get" id="sort-form">
+	<label for="id_order_by">Sort by:</label>
+	{{ form.order_by }}
+</form>
+
+<script>
+	document.addEventListener('DOMContentLoaded', function () {
+		const select = document.getElementById('id_order_by');
+		select.addEventListener('change', function () {
+			this.form.submit();
+		});
+	});
+</script>
+
+<ul>
+	{% for expense in expenses %}
+	<li>
+		{{ expense.date }} - {{ expense.category_obj|default:expense.category }} - {{ expense.receiver }}: 
+		{% if expense.split_rule %}
+			€{{ expense.user_share }} ({{ expense.split_rule.split_percentage }}% of €{{ expense.amount }})
+		{% else %}
+			€{{ expense.amount }}
+		{% endif %}
+		<a href="{% url 'expense_edit' expense.pk %}">Edit</a>
+		<a href="{% url 'expense_delete' expense.pk %}">Delete</a>
+	</li>
+	{% empty %}
+	<li>No expenses yet.</li>
+	{% endfor %}
+</ul>
+{% endblock %}

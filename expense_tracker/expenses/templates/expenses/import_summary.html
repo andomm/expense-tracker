@@ -1,0 +1,172 @@
+{% extends 'base.html' %}
+
+{% block title %}Import Summary{% endblock %}
+
+{% block content %}
+<h1>CSV Import Results</h1>
+
+<div class="import-summary">
+    <div class="summary-stats">
+        <p><strong>Total Expenses Imported:</strong> {{ import_results.total }}</p>
+        <p><strong>Categorized:</strong> <span class="success">{{ import_results.categorized }}</span></p>
+        <p><strong>Uncategorized:</strong> <span class="warning">{{ import_results.uncategorized }}</span></p>
+        
+        {% if import_results.uncategorized > 0 %}
+            <p class="info-text">
+                {{ import_results.uncategorized }} expense{{ import_results.uncategorized|pluralize }} could not be automatically categorized.
+                You can add keywords to your categories to improve matching, or manually assign categories to these expenses.
+            </p>
+        {% else %}
+            <p class="success-text">✓ All expenses were successfully categorized!</p>
+        {% endif %}
+    </div>
+
+    {% if import_results.uncategorized_expenses %}
+        <div class="uncategorized-list">
+            <h2>Uncategorized Expenses</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Receiver</th>
+                        <th>Description</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for expense in import_results.uncategorized_expenses %}
+                        <tr>
+                            <td>{{ expense.date }}</td>
+                            <td>{{ expense.receiver }}</td>
+                            <td>{{ expense.description }}</td>
+                            <td>{{ expense.amount }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            {% if extra_uncategorized > 0 %}
+                <p class="text-muted">
+                    ... and {{ extra_uncategorized }} more uncategorized expenses
+                </p>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    <div class="action-buttons">
+        <a href="{% url 'expense_list' %}" class="btn btn-primary">View Expenses</a>
+        <a href="{% url 'category_list' %}" class="btn btn-secondary">Manage Categories & Keywords</a>
+    </div>
+</div>
+
+<style>
+    .import-summary {
+        max-width: 800px;
+        margin: 2rem auto;
+    }
+    
+    .summary-stats {
+        background: #f5f5f5;
+        border-left: 4px solid #007bff;
+        padding: 1.5rem;
+        border-radius: 4px;
+        margin-bottom: 2rem;
+    }
+    
+    .summary-stats p {
+        margin: 0.5rem 0;
+        font-size: 1.1rem;
+    }
+    
+    .success {
+        color: #28a745;
+        font-weight: bold;
+    }
+    
+    .warning {
+        color: #ffc107;
+        font-weight: bold;
+    }
+    
+    .success-text {
+        color: #28a745;
+        font-style: italic;
+    }
+    
+    .info-text {
+        color: #666;
+        font-size: 0.95rem;
+        margin-top: 1rem;
+    }
+    
+    .uncategorized-list {
+        margin: 2rem 0;
+    }
+    
+    .uncategorized-list h2 {
+        font-size: 1.3rem;
+        margin-bottom: 1rem;
+    }
+    
+    .uncategorized-list table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 1rem;
+    }
+    
+    .uncategorized-list table th,
+    .uncategorized-list table td {
+        padding: 0.75rem;
+        text-align: left;
+        border-bottom: 1px solid #ddd;
+    }
+    
+    .uncategorized-list table th {
+        background: #f5f5f5;
+        font-weight: bold;
+    }
+    
+    .uncategorized-list table tr:hover {
+        background: #f9f9f9;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+    }
+    
+    .btn {
+        display: inline-block;
+        padding: 0.75rem 1.5rem;
+        text-decoration: none;
+        border-radius: 4px;
+        font-weight: 500;
+        border: none;
+        cursor: pointer;
+    }
+    
+    .btn-primary {
+        background: #007bff;
+        color: white;
+    }
+    
+    .btn-primary:hover {
+        background: #0056b3;
+    }
+    
+    .btn-secondary {
+        background: #6c757d;
+        color: white;
+    }
+    
+    .btn-secondary:hover {
+        background: #545b62;
+    }
+    
+    .text-muted {
+        color: #999;
+        font-size: 0.9rem;
+    }
+</style>
+{% endblock %}
