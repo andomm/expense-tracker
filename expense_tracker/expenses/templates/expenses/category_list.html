@@ -8,6 +8,7 @@
     <thead>
       <tr>
         <th>Name</th>
+        <th>Type</th>
         <th>Keywords (for CSV matching)</th>
         <th>Actions</th>
       </tr>
@@ -16,6 +17,7 @@
       {% for category in system_categories %}
         <tr>
           <td><strong>{{ category.name }}</strong></td>
+          <td>{{ category.get_category_type_display }}</td>
           <td>
             {% if category.keywords %}
               <code>{{ category.keywords }}</code>
@@ -30,7 +32,7 @@
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="3">No system categories.</td></tr>
+        <tr><td colspan="4">No system categories.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -40,6 +42,7 @@
     <thead>
       <tr>
         <th>Name</th>
+        <th>Type</th>
         <th>Keywords (for CSV matching)</th>
         <th>Actions</th>
       </tr>
@@ -48,6 +51,7 @@
       {% for category in user_categories %}
         <tr>
           <td>{{ category.name }}</td>
+          <td>{{ category.get_category_type_display }}</td>
           <td>
             {% if category.keywords %}
               <code>{{ category.keywords }}</code>
@@ -61,7 +65,7 @@
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="3">No custom categories yet. <a href="{% url 'category_add' %}">Add one</a></td></tr>
+        <tr><td colspan="4">No custom categories yet. <a href="{% url 'category_add' %}">Add one</a></td></tr>
       {% endfor %}
     </tbody>
   </table>

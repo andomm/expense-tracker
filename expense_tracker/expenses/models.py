@@ -5,8 +5,18 @@ from django.contrib.auth.models import User
 
 
 class Category(models.Model):
+    CATEGORY_TYPE_EXPENSE = "expense"
+    CATEGORY_TYPE_SAVING = "saving"
+    CATEGORY_TYPE_TRANSFER = "transfer"
+    CATEGORY_TYPE_CHOICES = [
+        (CATEGORY_TYPE_EXPENSE, "Expense"),
+        (CATEGORY_TYPE_SAVING, "Saving"),
+        (CATEGORY_TYPE_TRANSFER, "Transfer"),
+    ]
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=100)
+    category_type = models.CharField(max_length=20, choices=CATEGORY_TYPE_CHOICES, default=CATEGORY_TYPE_EXPENSE)
     is_system = models.BooleanField(default=False)
     keywords = models.TextField(blank=True, help_text="Comma-separated keywords for auto-matching expenses (e.g., 'lidl,prisma,k-market')")
     created_at = models.DateTimeField(auto_now_add=True)

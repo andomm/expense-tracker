@@ -61,7 +61,7 @@ class ExpenseForm(forms.ModelForm):
 class CategoryForm(forms.ModelForm):
     class Meta:
         model = Category
-        fields = ["name", "keywords"]
+        fields = ["name", "category_type", "keywords"]
         help_text = "Create a new custom category"
         widgets = {
             "keywords": forms.Textarea(attrs={

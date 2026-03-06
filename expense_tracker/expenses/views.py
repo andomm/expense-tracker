@@ -17,6 +17,11 @@ from plotly.offline import plot
 from django.db.models.functions import TruncMonth
 from collections import defaultdict
 
+NON_EXPENSE_CATEGORY_TYPES = (
+    Category.CATEGORY_TYPE_SAVING,
+    Category.CATEGORY_TYPE_TRANSFER,
+)
+
 
 def categorize_expense_by_description(description, user):
     """
@@ -51,6 +56,7 @@ def _create_cumulative_graph(user):
     """Create enhanced cumulative expenses graph with daily bars and cumulative line."""
     daily_totals = (
         Expense.objects.filter(user=user, amount__lt=0)
+        .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
         .values("date")
         .annotate(total_spent=Sum("user_share"))
         .order_by("date")
@@ -93,6 +99,7 @@ def _create_monthly_comparison(user):
     """Create monthly comparison bar chart."""
     monthly_totals = (
         Expense.objects.filter(user=user, amount__lt=0)
+        .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
         .annotate(month=TruncMonth("date"))
         .values("month")
         .annotate(total_spent=Sum("user_share"))
@@ -126,6 +133,7 @@ def _create_category_breakdown(user):
     """Create category-based pie chart."""
     category_totals = (
         Expense.objects.filter(user=user, amount__lt=0)
+        .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
         .values("category_obj__name")
         .annotate(total_spent=Sum("user_share"))
         .order_by("-total_spent")
@@ -174,6 +182,7 @@ def _create_income_vs_expenses(user):
         
         day_expenses = (
             Expense.objects.filter(user=user, date=item["date"], amount__lt=0)
+            .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
             .aggregate(total=Sum("user_share"))["total"] or 0
         )
         day_income = (
@@ -217,9 +226,10 @@ def _create_income_vs_expenses(user):
 def expenses_per_month(request):
     monthly_totals = (
         Expense.objects.filter(user=request.user, amount__lt=0)
+        .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
         .annotate(month=TruncMonth("date"))
         .values("month")
-        .annotate(total_spent=Sum("amount"))
+        .annotate(total_spent=Sum("user_share"))
         .order_by("month")
     )
 
@@ -251,11 +261,24 @@ def expense_list(request):
 
     expenses = Expense.objects.filter(user=request.user).order_by(order_by)
     # Use user_share for accurate personal calculations
-    total_spent = sum(expense.user_share for expense in expenses if expense.user_share and expense.amount < 0)
+    total_spent = sum(
+        expense.user_share
+        for expense in expenses
+        if expense.user_share
+        and expense.amount < 0
+        and not (
+            expense.category_obj
+            and expense.category_obj.category_type in NON_EXPENSE_CATEGORY_TYPES
+        )
+    )
     income = sum(expense.user_share for expense in expenses if expense.user_share and expense.amount > 0)
     balance = total_spent + income
 
-    top_expenses = expenses.filter(amount__lt=0).order_by("amount")[:5]
+    top_expenses = (
+        expenses.filter(amount__lt=0)
+        .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
+        .order_by("amount")[:5]
+    )
 
     return render(
         request,
