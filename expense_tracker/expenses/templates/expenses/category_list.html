@@ -31,7 +31,7 @@
                 <td>{{ category.get_category_type_display }}</td>
                 <td>
                   {% if category.keywords %}
-                    <code class="rounded bg-slate-100 px-2 py-1 text-xs">{{ category.keywords }}</code>
+                    <code class="keyword-pill">{{ category.keywords }}</code>
                   {% else %}
                     <span class="text-slate-400">No keywords</span>
                   {% endif %}
@@ -71,7 +71,7 @@
                 <td>{{ category.get_category_type_display }}</td>
                 <td>
                   {% if category.keywords %}
-                    <code class="rounded bg-slate-100 px-2 py-1 text-xs">{{ category.keywords }}</code>
+                    <code class="keyword-pill">{{ category.keywords }}</code>
                   {% else %}
                     <span class="text-slate-400">No keywords</span>
                   {% endif %}
