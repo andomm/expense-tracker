@@ -24,6 +24,7 @@
                         <th>Amount</th>
                         <th>Category</th>
                         <th>Matched keyword</th>
+                        <th>Matched from</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -35,6 +36,7 @@
                             <td>{{ expense.amount }}</td>
                             <td>{{ expense.category }}</td>
                             <td>{{ expense.matched_keyword }}</td>
+                            <td>{{ expense.matched_from }}</td>
                         </tr>
                     {% endfor %}
                 </tbody>
