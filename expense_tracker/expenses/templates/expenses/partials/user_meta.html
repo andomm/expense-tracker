@@ -1,4 +1,7 @@
 <div class="{{ user_meta_class }}">
     Hi, <span class="user-name">{{ user.username }}</span> ·
-    <a class="logout-link" href="{% url 'logout' %}">Logout</a>
+    <form method="post" action="{% url 'logout' %}" class="logout-form">
+        {% csrf_token %}
+        <button type="submit" class="logout-link logout-button">Logout</button>
+    </form>
 </div>
