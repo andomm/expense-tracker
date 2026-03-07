@@ -5,6 +5,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Expense Tracker{% endblock %}</title>
+    <script>
+        (function () {
+            const savedTheme = localStorage.getItem("theme");
+            if (savedTheme === "dark") {
+                document.documentElement.classList.add("dark-mode");
+            }
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="{% static 'expenses/style.css' %}">
     <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
@@ -16,7 +24,10 @@
         <div class="app-shell" x-data="{ open: false }">
             <div class="app-bar">
                 <a href="{% url 'expense_list' %}" class="brand-link">Expense Tracker</a>
-                <button class="menu-toggle md:hidden" @click="open = !open">Menu</button>
+                <div class="app-bar-actions">
+                    <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle dark mode">🌙 Dark</button>
+                    <button class="menu-toggle md:hidden" @click="open = !open">Menu</button>
+                </div>
             </div>
 
             {% if user.is_authenticated %}
@@ -52,6 +63,26 @@
 
         {% block content %}{% endblock %}
     </main>
+    <script>
+        (function () {
+            const root = document.documentElement;
+            const toggle = document.getElementById("theme-toggle");
+            if (!toggle) return;
+
+            const updateButton = function () {
+                const isDark = root.classList.contains("dark-mode");
+                toggle.textContent = isDark ? "☀️ Light" : "🌙 Dark";
+                toggle.setAttribute("aria-pressed", isDark ? "true" : "false");
+            };
+
+            updateButton();
+            toggle.addEventListener("click", function () {
+                root.classList.toggle("dark-mode");
+                localStorage.setItem("theme", root.classList.contains("dark-mode") ? "dark" : "light");
+                updateButton();
+            });
+        })();
+    </script>
 </body>
 
 </html>
