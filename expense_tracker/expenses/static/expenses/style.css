@@ -6,6 +6,70 @@ body {
     font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
 }
 
+.app-body {
+    min-height: 100vh;
+    background: #f8fafc;
+    color: #0f172a;
+}
+
+.app-header {
+    border-bottom: 1px solid #e2e8f0;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(4px);
+}
+
+.app-shell,
+.app-main {
+    margin: 0 auto;
+    max-width: 80rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.app-shell {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+}
+
+.app-main {
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
+}
+
+.app-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.brand-link {
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: #0f172a;
+}
+
+.menu-toggle {
+    border-radius: 0.375rem;
+    border: 1px solid #cbd5e1;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    background: #fff;
+}
+
+.desktop-row {
+    margin-top: 0.75rem;
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.nav-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
 .nav-link {
     display: inline-flex;
     align-items: center;
@@ -37,6 +101,84 @@ body {
     background: #fff;
     padding: 0.45rem 0.75rem;
     font-size: 0.9rem;
+    color: #334155;
+}
+
+.mobile-danger-link {
+    color: #b91c1c;
+}
+
+.user-meta {
+    font-size: 0.875rem;
+    color: #475569;
+}
+
+.user-meta-mobile {
+    padding-top: 0.5rem;
+}
+
+.user-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.logout-link {
+    font-weight: 500;
+    color: #334155;
+}
+
+.logout-link:hover {
+    color: #0f172a;
+}
+
+.mobile-menu {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.guest-links {
+    margin-top: 0.75rem;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.flash-stack {
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.flash-message {
+    border-radius: 0.5rem;
+    border: 1px solid #e2e8f0;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+}
+
+.flash-error {
+    border-color: #fecaca;
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.flash-warning {
+    border-color: #fde68a;
+    background: #fffbeb;
+    color: #b45309;
+}
+
+.flash-success {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+    color: #15803d;
+}
+
+.flash-default {
+    border-color: #e2e8f0;
+    background: #fff;
     color: #334155;
 }
 
@@ -119,4 +261,130 @@ th {
 
 tr:hover td {
     background: #f8fafc;
+}
+
+/* Summary pages */
+.import-summary,
+.sync-summary {
+    max-width: 1000px;
+    margin: 2rem auto;
+}
+
+.summary-stats {
+    background: #f5f5f5;
+    border-left: 4px solid #007bff;
+    padding: 1rem 1.25rem;
+    border-radius: 6px;
+    margin-bottom: 1.5rem;
+}
+
+.summary-stats p {
+    margin: 0.4rem 0;
+}
+
+.summary-success {
+    color: #16a34a;
+    font-weight: 700;
+}
+
+.summary-warning {
+    color: #d97706;
+    font-weight: 700;
+}
+
+.summary-success-text {
+    color: #16a34a;
+    font-style: italic;
+}
+
+.info-text {
+    color: #64748b;
+    font-size: 0.95rem;
+    margin-top: 0.75rem;
+}
+
+.uncategorized-list,
+.result-list {
+    margin-top: 1.5rem;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+
+.btn {
+    display: inline-block;
+    text-decoration: none;
+    padding: 0.6rem 1rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: #1d4ed8;
+}
+
+.btn-secondary {
+    background: #64748b;
+    color: #fff;
+}
+
+.btn-secondary:hover {
+    background: #475569;
+}
+
+.text-muted {
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.expense-page {
+    margin: 0 auto;
+    max-width: 72rem;
+}
+
+.expenses-table th:nth-child(1),
+.expenses-table td:nth-child(1) {
+    white-space: nowrap;
+    width: 8.5rem;
+}
+
+.expenses-table th:nth-child(4),
+.expenses-table td:nth-child(4) {
+    white-space: nowrap;
+    width: 15rem;
+}
+
+.expense-actions {
+    white-space: nowrap;
+    width: 8rem;
+}
+
+@media (min-width: 640px) {
+    .app-shell,
+    .app-main {
+        padding-left: 1.5rem;
+        padding-right: 1.5rem;
+    }
+}
+
+@media (min-width: 768px) {
+    .desktop-row {
+        display: flex;
+    }
+}
+
+@media (min-width: 1024px) {
+    .app-shell,
+    .app-main {
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
 }

@@ -8,8 +8,8 @@
 <div class="sync-summary">
     <div class="summary-stats">
         <p><strong>Uncategorized before sync:</strong> {{ sync_results.total_uncategorized_before }}</p>
-        <p><strong>Categorized by sync:</strong> <span class="success">{{ sync_results.updated_count }}</span></p>
-        <p><strong>Still uncategorized:</strong> <span class="warning">{{ sync_results.remaining_uncategorized }}</span></p>
+        <p><strong>Categorized by sync:</strong> <span class="summary-success">{{ sync_results.updated_count }}</span></p>
+        <p><strong>Still uncategorized:</strong> <span class="summary-warning">{{ sync_results.remaining_uncategorized }}</span></p>
     </div>
 
     {% if sync_results.updated_expenses %}
@@ -81,20 +81,4 @@
         <a href="{% url 'expense_list' %}" class="btn btn-primary">View Expenses</a>
     </div>
 </div>
-
-<style>
-    .sync-summary { max-width: 1000px; margin: 2rem auto; }
-    .summary-stats { background: #f5f5f5; border-left: 4px solid #007bff; padding: 1rem; margin-bottom: 1.5rem; }
-    .success { color: #28a745; font-weight: bold; }
-    .warning { color: #ffc107; font-weight: bold; }
-    .result-list { margin-top: 1.5rem; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { border-bottom: 1px solid #ddd; padding: 0.6rem; text-align: left; }
-    th { background: #f5f5f5; }
-    .action-buttons { margin-top: 1.5rem; display: flex; gap: 1rem; }
-    .btn { display: inline-block; text-decoration: none; padding: 0.6rem 1rem; border-radius: 4px; }
-    .btn-primary { background: #007bff; color: #fff; }
-    .btn-secondary { background: #6c757d; color: #fff; }
-    .text-muted { color: #777; }
-</style>
 {% endblock %}
