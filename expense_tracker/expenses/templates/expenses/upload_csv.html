@@ -1,10 +1,15 @@
 {% extends 'base.html' %}
 {% block content %}
-<h2>Upload CSV</h2>
-<form method="post" enctype="multipart/form-data">
-	{% csrf_token %}
-	{{ form.as_p }}
-	<button type="submit">Upload</button>
-</form>
-<a href="{% url 'expense_list' %}">Back to Expenses</a>
+<div class="mx-auto max-w-2xl rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+	<h2>Upload CSV</h2>
+	<p class="mb-4 text-sm text-slate-600">Upload your semicolon-separated bank export. Auto-categorization will use your category keywords.</p>
+	<form method="post" enctype="multipart/form-data" class="space-y-3">
+		{% csrf_token %}
+		{{ form.as_p }}
+		<div class="flex gap-2">
+			<button type="submit" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">Upload</button>
+			<a href="{% url 'expense_list' %}" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Back to expenses</a>
+		</div>
+	</form>
+</div>
 {% endblock %}

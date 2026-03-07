@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
-  <h2>Delete Category</h2>
-  <p>Are you sure you want to delete the category "<strong>{{ category.name }}</strong>"?</p>
-  <form method="post">
-    {% csrf_token %}
-    <button type="submit" class="delete-btn">Delete</button>
-    <a href="{% url 'category_list' %}">Cancel</a>
-  </form>
+  <div class="mx-auto max-w-xl rounded-xl border border-red-200 bg-white p-6 shadow-sm">
+    <h2>Delete Category</h2>
+    <p class="mb-4 text-slate-600">Are you sure you want to delete the category "<strong>{{ category.name }}</strong>"?</p>
+    <form method="post" class="flex gap-2">
+      {% csrf_token %}
+      <button type="submit" class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Delete</button>
+      <a href="{% url 'category_list' %}" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</a>
+    </form>
+  </div>
 {% endblock %}

@@ -1,52 +1,102 @@
 {% extends 'base.html' %}
 {% block content %}
+<div class="space-y-6">
+	<div class="flex flex-wrap items-center justify-between gap-3">
+		<h1 class="mb-0">My Expenses</h1>
+		<div class="flex flex-wrap gap-2">
+			<a href="{% url 'expense_add' %}" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">Add Expense</a>
+			<a href="{% url 'expense_delete_all' %}" class="rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50">Delete All</a>
+		</div>
+	</div>
 
-<h1>My Expenses</h1>
-<a href="{% url 'expense_add' %}">Add new expense</a>
-<a href="{% url 'expense_delete_all' %}">Delete all</a>
-<p> Total spent: {{ total_spent }}</p>
-<p> Income: {{ income }}</p>
-<p> Balance: {{ balance }}</p>
-<ul>
-	{% for expense in top_expenses %}
-	<li>
-		<strong>Top Expense:</strong> {{ expense.date }} - {{ expense.category_obj|default:expense.category }} - {{ expense.receiver }}:
-		{% if expense.split_rule %}
-			€{{ expense.user_share }} ({{ expense.split_rule.split_percentage }}% of €{{ expense.amount }})
-		{% else %}
-			€{{ expense.amount }}
-		{% endif %}
-	</li>
-	{% endfor %}
-</ul>
-<form method="get" id="sort-form">
-	<label for="id_order_by">Sort by:</label>
-	{{ form.order_by }}
-</form>
+	<div class="grid gap-3 sm:grid-cols-3">
+		<div class="rounded-xl border border-slate-200 bg-white p-4">
+			<p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total spent</p>
+			<p class="mt-1 text-xl font-semibold text-slate-900">€{{ total_spent }}</p>
+		</div>
+		<div class="rounded-xl border border-slate-200 bg-white p-4">
+			<p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Income</p>
+			<p class="mt-1 text-xl font-semibold text-emerald-700">€{{ income }}</p>
+		</div>
+		<div class="rounded-xl border border-slate-200 bg-white p-4">
+			<p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Balance</p>
+			<p class="mt-1 text-xl font-semibold text-indigo-700">€{{ balance }}</p>
+		</div>
+	</div>
+
+	{% if top_expenses %}
+		<div class="rounded-xl border border-slate-200 bg-white p-4">
+			<h3 class="mb-3">Top Expenses</h3>
+			<ul class="space-y-2 text-sm text-slate-700">
+				{% for expense in top_expenses %}
+					<li class="rounded-lg bg-slate-50 px-3 py-2">
+						<span class="font-medium">{{ expense.date }}</span> · {{ expense.category_obj|default:expense.category }} · {{ expense.receiver }}
+						<span class="float-right font-semibold text-slate-900">
+							{% if expense.split_rule %}
+								€{{ expense.user_share }} ({{ expense.split_rule.split_percentage }}% of €{{ expense.amount }})
+							{% else %}
+								€{{ expense.amount }}
+							{% endif %}
+						</span>
+					</li>
+				{% endfor %}
+			</ul>
+		</div>
+	{% endif %}
+
+	<div class="rounded-xl border border-slate-200 bg-white p-4">
+		<form method="get" id="sort-form" class="max-w-xs">
+			<label for="id_order_by">Sort by</label>
+			{{ form.order_by }}
+		</form>
+	</div>
+
+	<div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+		<table>
+			<thead>
+				<tr>
+					<th>Date</th>
+					<th>Category</th>
+					<th>Receiver</th>
+					<th>Amount</th>
+					<th>Actions</th>
+				</tr>
+			</thead>
+			<tbody>
+				{% for expense in expenses %}
+					<tr>
+						<td>{{ expense.date }}</td>
+						<td>{{ expense.category_obj|default:expense.category }}</td>
+						<td>{{ expense.receiver }}</td>
+						<td>
+							{% if expense.split_rule %}
+								€{{ expense.user_share }} <span class="text-xs text-slate-500">({{ expense.split_rule.split_percentage }}% of €{{ expense.amount }})</span>
+							{% else %}
+								€{{ expense.amount }}
+							{% endif %}
+						</td>
+						<td class="space-x-2">
+							<a href="{% url 'expense_edit' expense.pk %}" class="font-medium text-indigo-600 hover:text-indigo-800">Edit</a>
+							<a href="{% url 'expense_delete' expense.pk %}" class="font-medium text-red-600 hover:text-red-800">Delete</a>
+						</td>
+					</tr>
+				{% empty %}
+					<tr>
+						<td colspan="5" class="text-center text-slate-500">No expenses yet.</td>
+					</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	</div>
+</div>
 
 <script>
 	document.addEventListener('DOMContentLoaded', function () {
 		const select = document.getElementById('id_order_by');
+		if (!select) return;
 		select.addEventListener('change', function () {
 			this.form.submit();
 		});
 	});
 </script>
-
-<ul>
-	{% for expense in expenses %}
-	<li>
-		{{ expense.date }} - {{ expense.category_obj|default:expense.category }} - {{ expense.receiver }}: 
-		{% if expense.split_rule %}
-			€{{ expense.user_share }} ({{ expense.split_rule.split_percentage }}% of €{{ expense.amount }})
-		{% else %}
-			€{{ expense.amount }}
-		{% endif %}
-		<a href="{% url 'expense_edit' expense.pk %}">Edit</a>
-		<a href="{% url 'expense_delete' expense.pk %}">Delete</a>
-	</li>
-	{% empty %}
-	<li>No expenses yet.</li>
-	{% endfor %}
-</ul>
 {% endblock %}

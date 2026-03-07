@@ -1,38 +1,24 @@
 {% extends "base.html" %}
 {% block content %}
-  <h2>{{ title }}</h2>
-  
-  {% if title == "Add Category" %}
-    <p class="help-text">
-      <strong>Type</strong> controls calculations: use <em>Expense</em> for normal spending, <em>Saving</em> or <em>Transfer</em> to exclude entries from expense totals/charts.
-      <br>
-      <strong>Keywords</strong> are used to automatically match expenses during CSV import.
-      For example, a Groceries category could have keywords like: <code>lidl,prisma,market,supermarket,food</code>
-    </p>
-  {% endif %}
-  
-  <form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Save</button>
-    <a href="{% url 'category_list' %}">Cancel</a>
-  </form>
-  
-  <style>
-    .help-text {
-      background: #e7f3ff;
-      padding: 1rem;
-      border-left: 4px solid #007bff;
-      margin-bottom: 1rem;
-      border-radius: 4px;
-      font-size: 0.95rem;
-    }
+  <div class="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+    <h2>{{ title }}</h2>
     
-    .help-text code {
-      background: #f0f0f0;
-      padding: 0.2rem 0.4rem;
-      border-radius: 3px;
-      font-family: monospace;
-    }
-  </style>
+    {% if title == "Add Category" %}
+      <p class="mb-4 rounded-lg border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">
+        <strong>Type</strong> controls calculations: use <em>Expense</em> for normal spending, <em>Saving</em> or <em>Transfer</em> to exclude entries from expense totals/charts.
+        <br>
+        <strong>Keywords</strong> are used to automatically match expenses during CSV import.
+        For example, a Groceries category could have keywords like: <code class="rounded bg-indigo-100 px-1 py-0.5">lidl,prisma,market,supermarket,food</code>
+      </p>
+    {% endif %}
+    
+    <form method="post" class="space-y-3">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <div class="flex gap-2 pt-2">
+        <button type="submit" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">Save</button>
+        <a href="{% url 'category_list' %}" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</a>
+      </div>
+    </form>
+  </div>
 {% endblock %}

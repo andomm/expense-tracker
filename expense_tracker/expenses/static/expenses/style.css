@@ -1,5 +1,122 @@
+:root {
+    color-scheme: light;
+}
+
 body {
-    background-color: #f9fafb; /* a light gray */
-    color: #222; /* text color */
-    font-family: 'Inter', sans-serif;
+    font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+.nav-link {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 9999px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    padding: 0.35rem 0.8rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #334155;
+    transition: all 120ms ease;
+}
+
+.nav-link:hover {
+    border-color: #cbd5e1;
+    color: #0f172a;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+}
+
+.danger-link:hover {
+    border-color: #fecaca;
+    color: #b91c1c;
+}
+
+.mobile-nav-link {
+    display: block;
+    border-radius: 0.5rem;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.9rem;
+    color: #334155;
+}
+
+h1 {
+    margin-bottom: 1rem;
+    font-size: 1.7rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+h2 {
+    margin-bottom: 0.9rem;
+    font-size: 1.35rem;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+}
+
+h3 {
+    margin-bottom: 0.75rem;
+    font-size: 1.05rem;
+    font-weight: 650;
+}
+
+form label {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: #334155;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+form p {
+    margin-bottom: 1rem;
+}
+
+input,
+select,
+textarea {
+    width: 100%;
+    border-radius: 0.6rem;
+    border: 1px solid #d1d5db;
+    background: #fff;
+    padding: 0.62rem 0.75rem;
+    color: #0f172a;
+    outline: none;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    border-radius: 0.8rem;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+}
+
+th,
+td {
+    padding: 0.7rem 0.8rem;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+th {
+    background: #f8fafc;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+tr:hover td {
+    background: #f8fafc;
 }
