@@ -3,6 +3,9 @@ from django.db import models
 from .models import Expense, Category, ExpenseSplitRule
 
 
+UNCATEGORIZED_SENTINEL = "uncategorized"
+
+
 class SortForm(forms.Form):
     ORDER_CHOICES = [
         ("-date", "Date — newest first"),
@@ -15,6 +18,20 @@ class SortForm(forms.Form):
         required=False,
         label="Sort by",
     )
+    category_filter = forms.ChoiceField(
+        choices=[],
+        required=False,
+        label="Filter by category",
+    )
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        categories = Category.objects.filter(
+            models.Q(is_system=True) | models.Q(user=user)
+        ).order_by("name") if user else Category.objects.none()
+        choices = [("", "All categories"), (UNCATEGORIZED_SENTINEL, "Uncategorized")]
+        choices += [(str(c.pk), c.name) for c in categories]
+        self.fields["category_filter"].choices = choices
 
 
 class ExpenseForm(forms.ModelForm):

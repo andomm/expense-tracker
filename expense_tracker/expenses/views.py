@@ -1,6 +1,6 @@
 from django.shortcuts import get_object_or_404, render, redirect
 
-from .forms import ExpenseForm, CSVUploadForm, SortForm, CategoryForm
+from .forms import ExpenseForm, CSVUploadForm, SortForm, CategoryForm, UNCATEGORIZED_SENTINEL
 
 from .models import Expense, Category, ExpenseSplitRule
 from django.contrib.auth.decorators import login_required
@@ -254,13 +254,28 @@ def expenses_per_month(request):
 
 @login_required
 def expense_list(request):
-    form = SortForm(request.GET or None)
+    form = SortForm(request.GET or None, user=request.user)
     order_by = "-date"  # default order
+    category_filter_value = ""
+    active_category = None
 
     if form.is_valid():
         order_by = form.cleaned_data.get("order_by") or "-date"
+        category_filter_value = form.cleaned_data.get("category_filter") or ""
 
     expenses = Expense.objects.filter(user=request.user).order_by(order_by)
+
+    if category_filter_value == UNCATEGORIZED_SENTINEL:
+        expenses = expenses.filter(category_obj__isnull=True)
+        active_category = "Uncategorized"
+    elif category_filter_value:
+        try:
+            cat = Category.objects.get(pk=int(category_filter_value))
+            expenses = expenses.filter(category_obj=cat)
+            active_category = cat.name
+        except (Category.DoesNotExist, ValueError):
+            pass
+
     # Use user_share for accurate personal calculations
     total_spent = sum(
         expense.user_share
@@ -291,6 +306,7 @@ def expense_list(request):
             "balance": balance,
             "top_expenses": top_expenses,
             "form": form,
+            "active_category": active_category,
         },
     )
 
