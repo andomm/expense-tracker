@@ -51,28 +51,6 @@ def categorize_expense_by_description(description, user):
     return None, None
 
 
-def match_expense_to_category(receiver, description, user):
-    """
-    Two-stage category matching: try receiver first, fall back to description.
-
-    Returns:
-        (category_obj, matched_keyword, matched_from)
-        where matched_from is 'receiver', 'description', or None when no match.
-    """
-    receiver_text = (receiver or "").strip()
-    if receiver_text:
-        category_obj, matched_keyword = categorize_expense_by_description(receiver_text, user)
-        if category_obj:
-            return category_obj, matched_keyword, "receiver"
-
-    description_text = (description or "").strip()
-    if description_text:
-        category_obj, matched_keyword = categorize_expense_by_description(description_text, user)
-        if category_obj:
-            return category_obj, matched_keyword, "description"
-
-    return None, None, None
-
 
 
 def _create_cumulative_graph(user):
@@ -397,9 +375,14 @@ def upload_csv(request):
                 # Two-stage matching: try receiver first, fall back to description.
                 receiver = row.get("Saaja/Maksaja", "")
                 description = row.get("Viesti", "")
-                category_obj, matched_keyword, matched_from = match_expense_to_category(
-                    receiver, description, request.user
-                )
+                matched_from = None
+                category_obj, matched_keyword = categorize_expense_by_description(receiver, request.user)
+                if category_obj:
+                    matched_from = "receiver"
+                else:
+                    category_obj, matched_keyword = categorize_expense_by_description(description, request.user)
+                    if category_obj:
+                        matched_from = "description"
                 
                 if category_obj:
                     categorized_count += 1
@@ -480,9 +463,14 @@ def sync_categories(request):
     still_uncategorized = []
 
     for expense in uncategorized_expenses.iterator():
-        category_obj, matched_keyword, matched_from = match_expense_to_category(
-            expense.receiver, expense.description, request.user
-        )
+        matched_from = None
+        category_obj, matched_keyword = categorize_expense_by_description(expense.receiver, request.user)
+        if category_obj:
+            matched_from = "receiver"
+        else:
+            category_obj, matched_keyword = categorize_expense_by_description(expense.description, request.user)
+            if category_obj:
+                matched_from = "description"
         if category_obj:
             expense.category_obj = category_obj
             expense.category = category_obj.name
