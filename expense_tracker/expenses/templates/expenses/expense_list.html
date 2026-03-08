@@ -117,16 +117,18 @@
 			</thead>
 			<tbody>
 				{% for expense in expenses %}
-					<tr>
-						<td>{{ expense.date }}</td>
-						<td>{{ expense.category_obj|default:expense.category }}</td>
-						<td>{{ expense.receiver }}</td>
+					<tr class="hover:bg-slate-50">
+						<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.date }}</a></td>
+						<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.category_obj|default:expense.category }}</a></td>
+						<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.receiver }}</a></td>
 						<td>
+							<a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">
 							{% if expense.split_rule %}
 								€{{ expense.user_share }} <span class="text-xs text-slate-500">({{ expense.split_rule.split_percentage }}% of €{{ expense.amount }})</span>
 							{% else %}
 								€{{ expense.amount }}
 							{% endif %}
+							</a>
 						</td>
 						<td class="expense-actions space-x-2">
 							<a href="{% url 'expense_edit' expense.pk %}" class="font-medium text-indigo-600 hover:text-indigo-800">Edit</a>

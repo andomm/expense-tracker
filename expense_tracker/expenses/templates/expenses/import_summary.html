@@ -24,6 +24,7 @@
     {% if import_results.uncategorized_expenses %}
         <div class="uncategorized-list">
             <h2>Uncategorized Expenses</h2>
+            <p class="text-muted">Click an expense to open it in the edit view.</p>
             <table>
                 <thead>
                     <tr>
@@ -36,10 +37,10 @@
                 <tbody>
                     {% for expense in import_results.uncategorized_expenses %}
                         <tr>
-                            <td>{{ expense.date }}</td>
-                            <td>{{ expense.receiver }}</td>
-                            <td>{{ expense.description }}</td>
-                            <td>{{ expense.amount }}</td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.date }}</a></td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.receiver }}</a></td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.description }}</a></td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.amount }}</a></td>
                         </tr>
                     {% endfor %}
                 </tbody>

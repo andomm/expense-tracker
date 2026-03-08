@@ -248,18 +248,6 @@ def upload_csv(request):
                     user=request.user,
                 )
 
-                if match.category:
-                    categorized_count += 1
-                else:
-                    uncategorized_expenses.append(
-                        {
-                            "date": parsed.date,
-                            "receiver": parsed.receiver,
-                            "description": parsed.description,
-                            "amount": str(parsed.amount),
-                        }
-                    )
-
                 expense = Expense(
                     user=request.user,
                     date=parsed.date,
@@ -271,6 +259,19 @@ def upload_csv(request):
                 )
                 expense.save()
                 total_count += 1
+
+                if match.category:
+                    categorized_count += 1
+                else:
+                    uncategorized_expenses.append(
+                        {
+                            "id": expense.pk,
+                            "date": parsed.date,
+                            "receiver": parsed.receiver,
+                            "description": parsed.description,
+                            "amount": str(parsed.amount),
+                        }
+                    )
 
             request.session["import_results"] = {
                 "total": total_count,
@@ -344,6 +345,7 @@ def sync_categories(request):
             if len(updated_expenses) < PREVIEW_LIMIT:
                 updated_expenses.append(
                     {
+                        "id": expense.pk,
                         "date": expense.date.strftime("%Y-%m-%d"),
                         "receiver": expense.receiver,
                         "description": expense.description,
@@ -357,6 +359,7 @@ def sync_categories(request):
         elif len(still_uncategorized) < PREVIEW_LIMIT:
             still_uncategorized.append(
                 {
+                    "id": expense.pk,
                     "date": expense.date.strftime("%Y-%m-%d"),
                     "receiver": expense.receiver,
                     "description": expense.description,

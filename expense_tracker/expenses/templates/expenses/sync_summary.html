@@ -15,6 +15,7 @@
     {% if sync_results.updated_expenses %}
         <div class="result-list">
             <h2>Newly Categorized Expenses</h2>
+            <p class="text-muted">Click an expense to open it in the edit view.</p>
             <table>
                 <thead>
                     <tr>
@@ -30,13 +31,13 @@
                 <tbody>
                     {% for expense in sync_results.updated_expenses %}
                         <tr>
-                            <td>{{ expense.date }}</td>
-                            <td>{{ expense.receiver }}</td>
-                            <td>{{ expense.description }}</td>
-                            <td>{{ expense.amount }}</td>
-                            <td>{{ expense.category }}</td>
-                            <td>{{ expense.matched_keyword }}</td>
-                            <td>{{ expense.matched_from }}</td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.date }}</a></td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.receiver }}</a></td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.description }}</a></td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.amount }}</a></td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.category }}</a></td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.matched_keyword }}</a></td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.matched_from }}</a></td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -50,6 +51,7 @@
     {% if sync_results.still_uncategorized %}
         <div class="result-list">
             <h2>Still Uncategorized</h2>
+            <p class="text-muted">Click an expense to open it in the edit view.</p>
             <table>
                 <thead>
                     <tr>
@@ -62,10 +64,10 @@
                 <tbody>
                     {% for expense in sync_results.still_uncategorized %}
                         <tr>
-                            <td>{{ expense.date }}</td>
-                            <td>{{ expense.receiver }}</td>
-                            <td>{{ expense.description }}</td>
-                            <td>{{ expense.amount }}</td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.date }}</a></td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.receiver }}</a></td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.description }}</a></td>
+                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.amount }}</a></td>
                         </tr>
                     {% endfor %}
                 </tbody>
