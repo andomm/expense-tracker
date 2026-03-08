@@ -12,6 +12,7 @@ from .models import Expense, Category
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login
+from django.contrib.auth.models import User
 from decimal import Decimal
 
 import csv
@@ -28,13 +29,18 @@ from .charts import (
     create_monthly_comparison,
 )
 
+PREVIEW_LIMIT = 50
+
 NON_EXPENSE_CATEGORY_TYPES = (
     Category.CATEGORY_TYPE_SAVING,
     Category.CATEGORY_TYPE_TRANSFER,
 )
 
 
-def categorize_expense_by_description(description, user):
+def categorize_expense(
+    text: str,
+    user: User,
+):
     """
     Match an expense text to a category using keyword matching.
 
@@ -42,10 +48,10 @@ def categorize_expense_by_description(description, user):
         (category_obj, matched_keyword) if match found
         (None, None) if no match
     """
-    if not description or not description.strip():
+    if not text or not text.strip():
         return None, None
 
-    description_lower = description.lower()
+    text_lower = text.lower()
 
     # Get all categories (system + user's custom)
     categories = Category.objects.filter(Q(is_system=True) | Q(user=user)).exclude(
@@ -56,7 +62,7 @@ def categorize_expense_by_description(description, user):
     for category in categories:
         keywords = category.get_keywords_list()
         for keyword in keywords:
-            if keyword in description_lower:
+            if keyword in text_lower:
                 return category, keyword
 
     return None, None
@@ -253,7 +259,7 @@ def expense_delete_all(request):
 
 
 @login_required
-def upload_csv(request: HttpRequest):
+def upload_csv(request):
     if request.method == "POST":
         form = CSVUploadForm(request.POST, request.FILES)
         if form.is_valid():
@@ -271,13 +277,13 @@ def upload_csv(request: HttpRequest):
                 receiver = row.get("Saaja/Maksaja", "")
                 description = row.get("Viesti", "")
                 matched_from = None
-                category_obj, matched_keyword = categorize_expense_by_description(
+                category_obj, matched_keyword = categorize_expense(
                     receiver, request.user
                 )
                 if category_obj:
                     matched_from = "receiver"
                 else:
-                    category_obj, matched_keyword = categorize_expense_by_description(
+                    category_obj, matched_keyword = categorize_expense(
                         description, request.user
                     )
                     if category_obj:
@@ -367,23 +373,26 @@ def sync_categories(request):
 
     for expense in uncategorized_expenses.iterator():
         matched_from = None
-        category_obj, matched_keyword = categorize_expense_by_description(
-            expense.receiver, request.user
-        )
-        if category_obj:
-            matched_from = "receiver"
-        else:
-            category_obj, matched_keyword = categorize_expense_by_description(
-                expense.description, request.user
+
+        for source_name, source_value in (
+            ("receiver", expense.receiver),
+            ("description", expense.description),
+        ):
+            category_obj, matched_keyword = categorize_expense(
+                source_value, request.user
             )
             if category_obj:
-                matched_from = "description"
+                matched_from = source_name
+                break
+        else:
+            matched_from = None
+
         if category_obj:
             expense.category_obj = category_obj
             expense.category = category_obj.name
             expense.save(update_fields=["category_obj", "category"])
             updated_count += 1
-            if len(updated_expenses) < 50:
+            if len(updated_expenses) < PREVIEW_LIMIT:
                 updated_expenses.append(
                     {
                         "date": expense.date.strftime("%Y-%m-%d"),
@@ -395,7 +404,8 @@ def sync_categories(request):
                         "matched_from": matched_from,
                     }
                 )
-        elif len(still_uncategorized) < 50:
+
+        elif len(still_uncategorized) < PREVIEW_LIMIT:
             still_uncategorized.append(
                 {
                     "date": expense.date.strftime("%Y-%m-%d"),
@@ -412,6 +422,7 @@ def sync_categories(request):
         "updated_expenses": updated_expenses,
         "still_uncategorized": still_uncategorized,
     }
+
     return redirect("sync_summary")
 
 
