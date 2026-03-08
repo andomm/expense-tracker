@@ -16,23 +16,28 @@ class Category(models.Model):
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     name = models.CharField(max_length=100)
-    category_type = models.CharField(max_length=20, choices=CATEGORY_TYPE_CHOICES, default=CATEGORY_TYPE_EXPENSE)
+    category_type = models.CharField(
+        max_length=20, choices=CATEGORY_TYPE_CHOICES, default=CATEGORY_TYPE_EXPENSE
+    )
     is_system = models.BooleanField(default=False)
-    keywords = models.TextField(blank=True, help_text="Comma-separated keywords for auto-matching expenses (e.g., 'lidl,prisma,k-market')")
+    keywords = models.TextField(
+        blank=True,
+        help_text="Comma-separated keywords for auto-matching expenses (e.g., 'lidl,prisma,k-market')",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('user', 'name')
+        unique_together = ("user", "name")
         verbose_name_plural = "Categories"
 
     def __str__(self):
         return self.name
-    
+
     def get_keywords_list(self):
         """Return keywords as a list of lowercase strings."""
         if not self.keywords:
             return []
-        return [kw.strip().lower() for kw in self.keywords.split(',')]
+        return [kw.strip().lower() for kw in self.keywords.split(",")]
 
 
 class ExpenseSplitRule(models.Model):
@@ -43,7 +48,7 @@ class ExpenseSplitRule(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('user', 'name')
+        unique_together = ("user", "name")
 
     def __str__(self):
         return f"{self.name} ({self.split_percentage}%)"
@@ -52,12 +57,20 @@ class ExpenseSplitRule(models.Model):
 class Expense(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     date = models.DateField()
-    category = models.CharField(max_length=100)  # Keep as CharField for backwards compat
-    category_obj = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
+    category = models.CharField(
+        max_length=100
+    )  # Keep as CharField for backwards compat
+    category_obj = models.ForeignKey(
+        Category, on_delete=models.SET_NULL, null=True, blank=True
+    )
     description = models.TextField(blank=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    user_share = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    split_rule = models.ForeignKey(ExpenseSplitRule, on_delete=models.SET_NULL, null=True, blank=True)
+    user_share = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    split_rule = models.ForeignKey(
+        ExpenseSplitRule, on_delete=models.SET_NULL, null=True, blank=True
+    )
     receiver = models.CharField(max_length=100, blank=True)
 
     def save(self, *args, **kwargs):
