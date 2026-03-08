@@ -7,4 +7,11 @@ requires-python = ">=3.13"
 dependencies = [
     "django>=5.2.7",
     "plotly>=6.4.0",
+    "pytest-django>=4.12.0",
 ]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "expense_tracker.settings"
+pythonpath = ["expense_tracker"]
+python_files = ["tests.py", "test_*.py", "*_tests.py"]
+python_classes = ["Test*", "*Tests"]
