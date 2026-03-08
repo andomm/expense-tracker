@@ -16,6 +16,8 @@ import plotly.graph_objects as go
 from plotly.offline import plot
 from django.db.models.functions import TruncMonth
 from collections import defaultdict
+from datetime import date
+from calendar import monthrange
 
 NON_EXPENSE_CATEGORY_TYPES = (
     Category.CATEGORY_TYPE_SAVING,
@@ -252,7 +254,14 @@ def expenses_per_month(request):
     )
 
 
-@login_required
+def _add_months(d, months):
+    """Return a date shifted by `months` from d."""
+    month = d.month - 1 + months
+    year = d.year + month // 12
+    month = month % 12 + 1
+    return date(year, month, 1)
+
+
 def expense_list(request):
     form = SortForm(request.GET or None, user=request.user)
     order_by = "-date"  # default order
@@ -263,7 +272,31 @@ def expense_list(request):
         order_by = form.cleaned_data.get("order_by") or "-date"
         category_filter_value = form.cleaned_data.get("category_filter") or ""
 
+    # --- Month filter ---
+    today = date.today()
+    month_param = request.GET.get("month", "")
+    is_all = month_param == "all"
+
+    active_month_date = today.replace(day=1)  # first day of active month
+    if not is_all and month_param:
+        try:
+            active_month_date = date.fromisoformat(month_param + "-01")
+        except ValueError:
+            pass  # fall back to current month
+
+    prev_month_str = _add_months(active_month_date, -1).strftime("%Y-%m")
+    next_month_date = _add_months(active_month_date, 1)
+    next_month_str = next_month_date.strftime("%Y-%m")
+    is_current_month = active_month_date.year == today.year and active_month_date.month == today.month
+    active_month_label = active_month_date.strftime("%B %Y")
+
     expenses = Expense.objects.filter(user=request.user).order_by(order_by)
+
+    if not is_all:
+        expenses = expenses.filter(
+            date__year=active_month_date.year,
+            date__month=active_month_date.month,
+        )
 
     if category_filter_value == UNCATEGORIZED_SENTINEL:
         expenses = expenses.filter(category_obj__isnull=True)
@@ -307,6 +340,13 @@ def expense_list(request):
             "top_expenses": top_expenses,
             "form": form,
             "active_category": active_category,
+            # month nav
+            "active_month_label": active_month_label,
+            "active_month_str": active_month_date.strftime("%Y-%m"),
+            "prev_month_str": prev_month_str,
+            "next_month_str": next_month_str,
+            "is_current_month": is_current_month,
+            "is_all": is_all,
         },
     )
 
