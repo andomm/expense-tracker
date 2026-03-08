@@ -1,8 +1,14 @@
 from django.shortcuts import get_object_or_404, render, redirect
 
-from .forms import ExpenseForm, CSVUploadForm, SortForm, CategoryForm, UNCATEGORIZED_SENTINEL
+from .forms import (
+    ExpenseForm,
+    CSVUploadForm,
+    SortForm,
+    CategoryForm,
+    UNCATEGORIZED_SENTINEL,
+)
 
-from .models import Expense, Category, ExpenseSplitRule
+from .models import Expense, Category
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login
@@ -31,29 +37,31 @@ NON_EXPENSE_CATEGORY_TYPES = (
 def categorize_expense_by_description(description, user):
     """
     Match an expense text to a category using keyword matching.
-    
+
     Returns:
         (category_obj, matched_keyword) if match found
         (None, None) if no match
     """
     if not description or not description.strip():
         return None, None
-    
+
     description_lower = description.lower()
-    
+
     # Get all categories (system + user's custom)
-    categories = Category.objects.filter(
-        Q(is_system=True) | Q(user=user)
-    ).exclude(keywords='')
-    
+    categories = Category.objects.filter(Q(is_system=True) | Q(user=user)).exclude(
+        keywords=""
+    )
+
     # Try to find a matching category
     for category in categories:
         keywords = category.get_keywords_list()
         for keyword in keywords:
             if keyword in description_lower:
                 return category, keyword
-    
+
     return None, None
+
+
 @login_required
 def expenses_per_month(request):
     monthly_totals = (
@@ -101,22 +109,23 @@ def expense_list(request):
         order_by = form.cleaned_data.get("order_by") or "-date"
         category_filter_value = form.cleaned_data.get("category_filter") or ""
 
-    # --- Month filter ---
     today = date.today()
     month_param = request.GET.get("month", "")
     is_all = month_param == "all"
 
-    active_month_date = today.replace(day=1)  # first day of active month
+    active_month_date = today.replace(day=1)
     if not is_all and month_param:
         try:
             active_month_date = date.fromisoformat(month_param + "-01")
         except ValueError:
-            pass  # fall back to current month
+            pass
 
     prev_month_str = _add_months(active_month_date, -1).strftime("%Y-%m")
     next_month_date = _add_months(active_month_date, 1)
     next_month_str = next_month_date.strftime("%Y-%m")
-    is_current_month = active_month_date.year == today.year and active_month_date.month == today.month
+    is_current_month = (
+        active_month_date.year == today.year and active_month_date.month == today.month
+    )
     active_month_label = active_month_date.strftime("%B %Y")
 
     expenses = Expense.objects.filter(user=request.user).order_by(order_by)
@@ -149,7 +158,11 @@ def expense_list(request):
             and expense.category_obj.category_type in NON_EXPENSE_CATEGORY_TYPES
         )
     )
-    income = sum(expense.user_share for expense in expenses if expense.user_share and expense.amount > 0)
+    income = sum(
+        expense.user_share
+        for expense in expenses
+        if expense.user_share and expense.amount > 0
+    )
     balance = total_spent + income
 
     top_expenses = (
@@ -169,7 +182,6 @@ def expense_list(request):
             "top_expenses": top_expenses,
             "form": form,
             "active_category": active_category,
-            # month nav
             "active_month_label": active_month_label,
             "active_month_str": active_month_date.strftime("%Y-%m"),
             "prev_month_str": prev_month_str,
@@ -185,7 +197,7 @@ def signup(request):
         form = UserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
-            login(request, user)  # log in the user right after signup
+            login(request, user)
             return redirect("expense_list")
     else:
         form = UserCreationForm()
@@ -241,51 +253,55 @@ def expense_delete_all(request):
 
 
 @login_required
-def upload_csv(request):
+def upload_csv(request: HttpRequest):
     if request.method == "POST":
         form = CSVUploadForm(request.POST, request.FILES)
         if form.is_valid():
             csv_file = TextIOWrapper(request.FILES["file"].file, encoding="utf-8")
             reader = csv.DictReader(csv_file, delimiter=";")
-            
-            # Track results
+
             total_count = 0
             categorized_count = 0
             uncategorized_expenses = []
-            
+
             for row in reader:
-                # Adjust these keys to match your CSV columns
                 row["Määrä EUROA"] = row["Määrä EUROA"].replace(",", ".")
-                
+
                 # Two-stage matching: try receiver first, fall back to description.
                 receiver = row.get("Saaja/Maksaja", "")
                 description = row.get("Viesti", "")
                 matched_from = None
-                category_obj, matched_keyword = categorize_expense_by_description(receiver, request.user)
+                category_obj, matched_keyword = categorize_expense_by_description(
+                    receiver, request.user
+                )
                 if category_obj:
                     matched_from = "receiver"
                 else:
-                    category_obj, matched_keyword = categorize_expense_by_description(description, request.user)
+                    category_obj, matched_keyword = categorize_expense_by_description(
+                        description, request.user
+                    )
                     if category_obj:
                         matched_from = "description"
-                
+
                 if category_obj:
                     categorized_count += 1
                 else:
                     # Track uncategorized expenses for feedback
-                    uncategorized_expenses.append({
-                        'date': row.get("Arvopäivä", ""),
-                        'receiver': receiver,
-                        'description': description,
-                        'amount': row.get("Määrä EUROA", ""),
-                    })
-                
+                    uncategorized_expenses.append(
+                        {
+                            "date": row.get("Arvopäivä", ""),
+                            "receiver": receiver,
+                            "description": description,
+                            "amount": row.get("Määrä EUROA", ""),
+                        }
+                    )
+
                 amount = Decimal(row["Määrä EUROA"])
                 expense = Expense(
                     user=request.user,
                     date=row["Arvopäivä"],
-                    category=row.get("Selitys", ""),  # Keep for reference
-                    category_obj=category_obj,  # NEW: Smart matched category
+                    category=row.get("Selitys", ""),
+                    category_obj=category_obj,
                     description=description,
                     amount=amount,
                     receiver=receiver,
@@ -293,15 +309,15 @@ def upload_csv(request):
                 # user_share will be auto-set by save() method
                 expense.save()
                 total_count += 1
-            
+
             # Store results in session for import summary page
-            request.session['import_results'] = {
-                'total': total_count,
-                'categorized': categorized_count,
-                'uncategorized': total_count - categorized_count,
-                'uncategorized_expenses': uncategorized_expenses[:50],  # Limit to first 50
+            request.session["import_results"] = {
+                "total": total_count,
+                "categorized": categorized_count,
+                "uncategorized": total_count - categorized_count,
+                "uncategorized_expenses": uncategorized_expenses[:50],
             }
-            
+
             return redirect("import_summary")
     else:
         form = CSVUploadForm()
@@ -341,7 +357,9 @@ def sync_categories(request):
         messages.error(request, "Category sync must be started with the sync button.")
         return redirect("category_list")
 
-    uncategorized_expenses = Expense.objects.filter(user=request.user, category_obj__isnull=True)
+    uncategorized_expenses = Expense.objects.filter(
+        user=request.user, category_obj__isnull=True
+    )
     total_uncategorized = uncategorized_expenses.count()
     updated_count = 0
     updated_expenses = []
@@ -349,11 +367,15 @@ def sync_categories(request):
 
     for expense in uncategorized_expenses.iterator():
         matched_from = None
-        category_obj, matched_keyword = categorize_expense_by_description(expense.receiver, request.user)
+        category_obj, matched_keyword = categorize_expense_by_description(
+            expense.receiver, request.user
+        )
         if category_obj:
             matched_from = "receiver"
         else:
-            category_obj, matched_keyword = categorize_expense_by_description(expense.description, request.user)
+            category_obj, matched_keyword = categorize_expense_by_description(
+                expense.description, request.user
+            )
             if category_obj:
                 matched_from = "description"
         if category_obj:
@@ -403,7 +425,9 @@ def category_add(request):
             category.user = request.user
             category.is_system = False
             category.save()
-            messages.success(request, f"Category '{category.name}' created successfully!")
+            messages.success(
+                request, f"Category '{category.name}' created successfully!"
+            )
             return redirect("category_list")
     else:
         form = CategoryForm()
@@ -422,16 +446,18 @@ def category_edit(request, pk):
         category = get_object_or_404(Category, pk=pk)
     else:
         category = get_object_or_404(Category, pk=pk, user=request.user)
-    
+
     if request.method == "POST":
         form = CategoryForm(request.POST, instance=category)
         if form.is_valid():
             form.save()
-            messages.success(request, f"Category '{category.name}' updated successfully!")
+            messages.success(
+                request, f"Category '{category.name}' updated successfully!"
+            )
             return redirect("category_list")
     else:
         form = CategoryForm(instance=category)
-    
+
     return render(
         request,
         "expenses/category_form.html",
@@ -443,17 +469,17 @@ def category_edit(request, pk):
 def category_delete(request, pk):
     """Delete a custom category (system categories can't be deleted)."""
     category = get_object_or_404(Category, pk=pk, user=request.user)
-    
+
     if category.is_system:
         messages.error(request, "System categories cannot be deleted.")
         return redirect("category_list")
-    
+
     if request.method == "POST":
         category_name = category.name
         category.delete()
         messages.success(request, f"Category '{category_name}' deleted successfully!")
         return redirect("category_list")
-    
+
     return render(
         request,
         "expenses/category_confirm_delete.html",
@@ -464,23 +490,32 @@ def category_delete(request, pk):
 @login_required
 def import_summary(request):
     """Display import results with categorization summary."""
-    import_results = request.session.get('import_results', {
-        'total': 0,
-        'categorized': 0,
-        'uncategorized': 0,
-        'uncategorized_expenses': [],
-    })
-    shown_uncategorized = len(import_results.get('uncategorized_expenses', []))
-    extra_uncategorized = max(0, import_results.get('uncategorized', 0) - shown_uncategorized)
-    
+    import_results = request.session.get(
+        "import_results",
+        {
+            "total": 0,
+            "categorized": 0,
+            "uncategorized": 0,
+            "uncategorized_expenses": [],
+        },
+    )
+    shown_uncategorized = len(import_results.get("uncategorized_expenses", []))
+    extra_uncategorized = max(
+        0, import_results.get("uncategorized", 0) - shown_uncategorized
+    )
+
     # Clear from session after display
-    if 'import_results' in request.session:
-        del request.session['import_results']
-    
-    return render(request, "expenses/import_summary.html", {
-        "import_results": import_results,
-        "extra_uncategorized": extra_uncategorized,
-    })
+    if "import_results" in request.session:
+        del request.session["import_results"]
+
+    return render(
+        request,
+        "expenses/import_summary.html",
+        {
+            "import_results": import_results,
+            "extra_uncategorized": extra_uncategorized,
+        },
+    )
 
 
 @login_required
@@ -496,10 +531,13 @@ def sync_summary(request):
             "still_uncategorized": [],
         },
     )
-    extra_updated = max(0, sync_results["updated_count"] - len(sync_results["updated_expenses"]))
+    extra_updated = max(
+        0, sync_results["updated_count"] - len(sync_results["updated_expenses"])
+    )
     extra_remaining = max(
         0,
-        sync_results["remaining_uncategorized"] - len(sync_results["still_uncategorized"]),
+        sync_results["remaining_uncategorized"]
+        - len(sync_results["still_uncategorized"]),
     )
 
     if "sync_results" in request.session:
