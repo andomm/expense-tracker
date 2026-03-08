@@ -1,6 +1,7 @@
 from django.shortcuts import get_object_or_404, render, redirect
 
 from .helpers import categorize_from_sources
+from expenses.importers import FinnishBankCSVImporter
 
 from .forms import (
     ExpenseForm,
@@ -14,10 +15,7 @@ from .models import Expense, Category
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login
-from decimal import Decimal
 
-import csv
-from io import TextIOWrapper
 from django.contrib import messages
 from django.db.models import Sum
 from django.db.models.functions import TruncMonth
@@ -233,53 +231,46 @@ def upload_csv(request):
     if request.method == "POST":
         form = CSVUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            csv_file = TextIOWrapper(request.FILES["file"].file, encoding="utf-8")
-            reader = csv.DictReader(csv_file, delimiter=";")
+            importer = FinnishBankCSVImporter()
+            rows = importer.read_rows(request.FILES["file"])
 
             total_count = 0
             categorized_count = 0
             uncategorized_expenses = []
 
-            for row in reader:
-                row["Määrä EUROA"] = row["Määrä EUROA"].replace(",", ".")
+            for row in rows:
+                parsed = importer.parse_row(row)
 
-                # Two-stage matching: try receiver first, fall back to description.
-                receiver = row.get("Saaja/Maksaja", "")
-                description = row.get("Viesti", "")
                 match = categorize_from_sources(
-                    ("receiver", receiver),
-                    ("description", description),
+                    ("receiver", parsed.receiver),
+                    ("description", parsed.description),
                     user=request.user,
                 )
 
                 if match.category:
                     categorized_count += 1
                 else:
-                    # Track uncategorized expenses for feedback
                     uncategorized_expenses.append(
                         {
-                            "date": row.get("Arvopäivä", ""),
-                            "receiver": receiver,
-                            "description": description,
-                            "amount": row.get("Määrä EUROA", ""),
+                            "date": parsed.date,
+                            "receiver": parsed.receiver,
+                            "description": parsed.description,
+                            "amount": str(parsed.amount),
                         }
                     )
 
-                amount = Decimal(row["Määrä EUROA"])
                 expense = Expense(
                     user=request.user,
-                    date=row["Arvopäivä"],
-                    category=row.get("Selitys", ""),
+                    date=parsed.date,
+                    category=parsed.category,
                     category_obj=match.category,
-                    description=description,
-                    amount=amount,
-                    receiver=receiver,
+                    description=parsed.description,
+                    amount=parsed.amount,
+                    receiver=parsed.receiver,
                 )
-                # user_share will be auto-set by save() method
                 expense.save()
                 total_count += 1
 
-            # Store results in session for import summary page
             request.session["import_results"] = {
                 "total": total_count,
                 "categorized": categorized_count,
@@ -290,6 +281,7 @@ def upload_csv(request):
             return redirect("import_summary")
     else:
         form = CSVUploadForm()
+
     return render(request, "expenses/upload_csv.html", {"form": form})
 
 
