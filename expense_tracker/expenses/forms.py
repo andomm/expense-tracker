@@ -97,4 +97,14 @@ class CategoryForm(forms.ModelForm):
 
 
 class CSVUploadForm(forms.Form):
+    IMPORT_FORMAT_FINNISH_BANK = "osuuspankki_csv"
+    IMPORT_FORMAT_CHOICES = [
+        (IMPORT_FORMAT_FINNISH_BANK, "OP"),
+    ]
+
     file = forms.FileField(label="Select a CSV file")
+    import_format = forms.ChoiceField(
+        choices=IMPORT_FORMAT_CHOICES,
+        label="File format",
+        initial=IMPORT_FORMAT_FINNISH_BANK,
+    )

@@ -37,3 +37,9 @@ class FinnishBankCSVImporter(BaseExpenseImporter):
             receiver=row.get("Saaja/Maksaja", ""),
             amount=amount,
         )
+
+
+def get_importer(import_format: str) -> BaseExpenseImporter:
+    if import_format == "osuuspankki_csv":
+        return FinnishBankCSVImporter()
+    raise ValueError(f"Unsupported import format: {import_format}")

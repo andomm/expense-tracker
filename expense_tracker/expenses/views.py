@@ -1,7 +1,8 @@
 from django.shortcuts import get_object_or_404, render, redirect
 
+from .importers import get_importer
+
 from .helpers import categorize_from_sources
-from expenses.importers import FinnishBankCSVImporter
 
 from .forms import (
     ExpenseForm,
@@ -231,7 +232,7 @@ def upload_csv(request):
     if request.method == "POST":
         form = CSVUploadForm(request.POST, request.FILES)
         if form.is_valid():
-            importer = FinnishBankCSVImporter()
+            importer = get_importer(form.cleaned_data["import_format"])
             rows = importer.read_rows(request.FILES["file"])
 
             total_count = 0
