@@ -30,14 +30,14 @@ class Category(models.Model):
         unique_together = ("user", "name")
         verbose_name_plural = "Categories"
 
-    def __str__(self):
-        return self.name
+    def __str__(self) -> str:
+        return str(self.name)
 
-    def get_keywords_list(self):
+    def get_keywords_list(self) -> list[str]:
         """Return keywords as a list of lowercase strings."""
         if not self.keywords:
             return []
-        return [kw.strip().lower() for kw in self.keywords.split(",")]
+        return [kw.strip().lower() for kw in str(self.keywords).split(",")]
 
 
 class ExpenseSplitRule(models.Model):
