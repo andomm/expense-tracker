@@ -1,5 +1,7 @@
 from django.shortcuts import get_object_or_404, render, redirect
 
+from .helpers import categorize_from_sources
+
 from .forms import (
     ExpenseForm,
     CSVUploadForm,
@@ -12,17 +14,16 @@ from .models import Expense, Category
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth import login
-from django.contrib.auth.models import User
 from decimal import Decimal
 
 import csv
 from io import TextIOWrapper
 from django.contrib import messages
-from django.db.models import Sum, Q
+from django.db.models import Sum
 from django.db.models.functions import TruncMonth
 from datetime import date
 
-from .charts import (
+from expenses.charts import (
     create_category_breakdown,
     create_cumulative_graph,
     create_income_vs_expenses,
@@ -35,37 +36,6 @@ NON_EXPENSE_CATEGORY_TYPES = (
     Category.CATEGORY_TYPE_SAVING,
     Category.CATEGORY_TYPE_TRANSFER,
 )
-
-
-def categorize_expense(
-    text: str,
-    user: User,
-):
-    """
-    Match an expense text to a category using keyword matching.
-
-    Returns:
-        (category_obj, matched_keyword) if match found
-        (None, None) if no match
-    """
-    if not text or not text.strip():
-        return None, None
-
-    text_lower = text.lower()
-
-    # Get all categories (system + user's custom)
-    categories = Category.objects.filter(Q(is_system=True) | Q(user=user)).exclude(
-        keywords=""
-    )
-
-    # Try to find a matching category
-    for category in categories:
-        keywords = category.get_keywords_list()
-        for keyword in keywords:
-            if keyword in text_lower:
-                return category, keyword
-
-    return None, None
 
 
 @login_required
@@ -276,20 +246,13 @@ def upload_csv(request):
                 # Two-stage matching: try receiver first, fall back to description.
                 receiver = row.get("Saaja/Maksaja", "")
                 description = row.get("Viesti", "")
-                matched_from = None
-                category_obj, matched_keyword = categorize_expense(
-                    receiver, request.user
+                match = categorize_from_sources(
+                    ("receiver", receiver),
+                    ("description", description),
+                    user=request.user,
                 )
-                if category_obj:
-                    matched_from = "receiver"
-                else:
-                    category_obj, matched_keyword = categorize_expense(
-                        description, request.user
-                    )
-                    if category_obj:
-                        matched_from = "description"
 
-                if category_obj:
+                if match.category:
                     categorized_count += 1
                 else:
                     # Track uncategorized expenses for feedback
@@ -307,7 +270,7 @@ def upload_csv(request):
                     user=request.user,
                     date=row["Arvopäivä"],
                     category=row.get("Selitys", ""),
-                    category_obj=category_obj,
+                    category_obj=match.category,
                     description=description,
                     amount=amount,
                     receiver=receiver,
@@ -374,22 +337,15 @@ def sync_categories(request):
     for expense in uncategorized_expenses.iterator():
         matched_from = None
 
-        for source_name, source_value in (
+        match = categorize_from_sources(
             ("receiver", expense.receiver),
             ("description", expense.description),
-        ):
-            category_obj, matched_keyword = categorize_expense(
-                source_value, request.user
-            )
-            if category_obj:
-                matched_from = source_name
-                break
-        else:
-            matched_from = None
+            user=request.user,
+        )
 
-        if category_obj:
-            expense.category_obj = category_obj
-            expense.category = category_obj.name
+        if match.category:
+            expense.category_obj = match.category
+            expense.category = match.category.name
             expense.save(update_fields=["category_obj", "category"])
             updated_count += 1
             if len(updated_expenses) < PREVIEW_LIMIT:
@@ -399,9 +355,9 @@ def sync_categories(request):
                         "receiver": expense.receiver,
                         "description": expense.description,
                         "amount": str(expense.amount),
-                        "category": category_obj.name,
-                        "matched_keyword": matched_keyword,
-                        "matched_from": matched_from,
+                        "category": match.category.name,
+                        "matched_keyword": match.keyword,
+                        "matched_from": match.source,
                     }
                 )
 
