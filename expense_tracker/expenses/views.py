@@ -1,4 +1,6 @@
 from django.shortcuts import get_object_or_404, render, redirect
+from django.db import models
+from django.db.models import Q
 
 from .importers import get_importer
 
@@ -74,6 +76,7 @@ def _add_months(d, months):
     return date(year, month, 1)
 
 
+@login_required
 def expense_list(request):
     form = SortForm(request.GET or None, user=request.user)
     order_by = "-date"  # default order
@@ -116,9 +119,18 @@ def expense_list(request):
         active_category = "Uncategorized"
     elif category_filter_value:
         try:
-            cat = Category.objects.get(pk=int(category_filter_value))
-            expenses = expenses.filter(category_obj=cat)
-            active_category = cat.name
+            cat = Category.objects.select_related(
+                "parent", "parent__parent", "parent__parent__parent", "parent__parent__parent__parent"
+            ).get(
+                Q(is_system=True) | Q(user=request.user),
+                pk=int(category_filter_value),
+            )
+            descendant_ids = cat.get_all_descendant_ids()
+            expenses = expenses.filter(category_obj_id__in=[cat.pk, *descendant_ids])
+            has_descendants = bool(descendant_ids)
+            active_category = (
+                f"{cat.name} (+ subcategories)" if has_descendants else cat.name
+            )
         except (Category.DoesNotExist, ValueError):
             pass
 
@@ -300,28 +312,73 @@ def show_expenses_amount(request):
 
 @login_required
 def category_list(request):
-    """List all categories (system + user custom)."""
-    system_categories = Category.objects.filter(is_system=True)
-    user_categories = Category.objects.filter(user=request.user)
+    """List all categories (system + user custom) as ordered flat trees."""
+
+    def build_flat_tree(root_queryset) -> list[tuple]:
+        """
+        Return (category, depth) pairs ordered so each parent is immediately
+        followed by all its children (recursively), alphabetically within each level.
+        Loads the full subtree efficiently using a single query + Python grouping.
+        """
+        root_ids = list(root_queryset.values_list("pk", flat=True))
+        if not root_ids:
+            return []
+
+        # Load all categories in the same tree(s) in one query
+        all_cats = list(
+            Category.objects.filter(
+                models.Q(pk__in=root_ids)
+                | models.Q(parent_id__in=root_ids)
+                | models.Q(parent__parent_id__in=root_ids)
+                | models.Q(parent__parent__parent_id__in=root_ids)
+                | models.Q(parent__parent__parent__parent_id__in=root_ids)
+            ).select_related(
+                "parent", "parent__parent", "parent__parent__parent", "parent__parent__parent__parent"
+            )
+        )
+
+        by_parent: dict[int | None, list] = {}
+        for cat in all_cats:
+            by_parent.setdefault(cat.parent_id, []).append(cat)
+
+        for children in by_parent.values():
+            children.sort(key=lambda c: c.name.lower())
+
+        result: list[tuple] = []
+
+        def traverse(parent_id, depth):
+            for cat in by_parent.get(parent_id, []):
+                # Only start from actual roots of this queryset
+                if parent_id is None and cat.pk not in root_ids:
+                    continue
+                result.append((cat, depth))
+                traverse(cat.pk, depth + 1)
+
+        traverse(None, 1)
+        return result
+
+    system_roots = Category.objects.filter(is_system=True, parent__isnull=True)
+    user_roots = Category.objects.filter(user=request.user, parent__isnull=True)
+
     return render(
         request,
         "expenses/category_list.html",
         {
-            "system_categories": system_categories,
-            "user_categories": user_categories,
+            "system_category_tree": build_flat_tree(system_roots),
+            "user_category_tree": build_flat_tree(user_roots),
         },
     )
 
+#TODO: These sync functions could be moved somewhere else
+def run_category_sync(user):
+    uncategorized_results = sync_uncategorized_expenses(user)
+    upgrade_results = upgrade_categorized_expenses(user)
+    return {**uncategorized_results, **upgrade_results}
 
-@login_required
-def sync_categories(request):
-    """Apply current keyword rules to uncategorized existing expenses."""
-    if request.method != "POST":
-        messages.error(request, "Category sync must be started with the sync button.")
-        return redirect("category_list")
 
+def sync_uncategorized_expenses(user):
     uncategorized_expenses = Expense.objects.filter(
-        user=request.user, category_obj__isnull=True
+        user=user, category_obj__isnull=True
     )
     total_uncategorized = uncategorized_expenses.count()
     updated_count = 0
@@ -329,12 +386,10 @@ def sync_categories(request):
     still_uncategorized = []
 
     for expense in uncategorized_expenses.iterator():
-        matched_from = None
-
         match = categorize_from_sources(
             ("receiver", expense.receiver),
             ("description", expense.description),
-            user=request.user,
+            user=user,
         )
 
         if match.category:
@@ -342,6 +397,7 @@ def sync_categories(request):
             expense.category = match.category.name
             expense.save(update_fields=["category_obj", "category"])
             updated_count += 1
+
             if len(updated_expenses) < PREVIEW_LIMIT:
                 updated_expenses.append(
                     {
@@ -367,7 +423,7 @@ def sync_categories(request):
                 }
             )
 
-    request.session["sync_results"] = {
+    return {
         "total_uncategorized_before": total_uncategorized,
         "updated_count": updated_count,
         "remaining_uncategorized": total_uncategorized - updated_count,
@@ -375,14 +431,86 @@ def sync_categories(request):
         "still_uncategorized": still_uncategorized,
     }
 
-    return redirect("sync_summary")
 
+def can_upgrade_category(current, candidate):
+    if candidate.pk == current.pk:
+        return False
+    if candidate.get_depth() <= current.get_depth():
+        return False
+    if candidate.get_root().pk != current.get_root().pk:
+        return False
+    return True
+
+
+def upgrade_categorized_expenses(user):
+    categorized_expenses = Expense.objects.filter(
+        user=user, category_obj__isnull=False
+    ).select_related(
+        "category_obj__parent",
+        "category_obj__parent__parent",
+        "category_obj__parent__parent__parent",
+        "category_obj__parent__parent__parent__parent",
+    )
+
+    upgraded_count = 0
+    upgraded_expenses = []
+
+    for expense in categorized_expenses.iterator():
+        match = categorize_from_sources(
+            ("receiver", expense.receiver),
+            ("description", expense.description),
+            user=user,
+        )
+
+        if not match.category:
+            continue
+
+        current = expense.category_obj
+        candidate = match.category
+
+        if not can_upgrade_category(current, candidate):
+            continue
+
+        old_category_name = current.name
+        expense.category_obj = candidate
+        expense.category = candidate.name
+        expense.save(update_fields=["category_obj", "category"])
+        upgraded_count += 1
+
+        if len(upgraded_expenses) < PREVIEW_LIMIT:
+            upgraded_expenses.append(
+                {
+                    "id": expense.pk,
+                    "date": expense.date.strftime("%Y-%m-%d"),
+                    "receiver": expense.receiver,
+                    "description": expense.description,
+                    "amount": str(expense.amount),
+                    "old_category": old_category_name,
+                    "new_category": candidate.name,
+                    "matched_keyword": match.keyword,
+                }
+            )
+
+    return {
+        "upgraded_count": upgraded_count,
+        "upgraded_expenses": upgraded_expenses,
+    }
+
+@login_required
+def sync_categories(request):
+    if request.method != "POST":
+        messages.error(request, "Category sync must be started with the sync button.")
+        return redirect("category_list")
+
+    request.session["sync_results"] = run_category_sync(request.user)
+    return redirect("sync_summary")
 
 @login_required
 def category_add(request):
     """Add a new custom category."""
+    category_instance = Category(user=request.user, is_system=False)
     if request.method == "POST":
-        form = CategoryForm(request.POST)
+        form = CategoryForm(request.POST, user=request.user, instance=category_instance)
         if form.is_valid():
             category = form.save(commit=False)
             category.user = request.user
@@ -393,7 +521,7 @@ def category_add(request):
             )
             return redirect("category_list")
     else:
-        form = CategoryForm()
+        form = CategoryForm(user=request.user, instance=category_instance)
     return render(
         request,
         "expenses/category_form.html",
@@ -411,7 +539,7 @@ def category_edit(request, pk):
         category = get_object_or_404(Category, pk=pk, user=request.user)
 
     if request.method == "POST":
-        form = CategoryForm(request.POST, instance=category)
+        form = CategoryForm(request.POST, instance=category, user=request.user)
         if form.is_valid():
             form.save()
             messages.success(
@@ -419,7 +547,7 @@ def category_edit(request, pk):
             )
             return redirect("category_list")
     else:
-        form = CategoryForm(instance=category)
+        form = CategoryForm(instance=category, user=request.user)
 
     return render(
         request,
@@ -492,8 +620,14 @@ def sync_summary(request):
             "remaining_uncategorized": 0,
             "updated_expenses": [],
             "still_uncategorized": [],
+            "upgraded_count": 0,
+            "upgraded_expenses": [],
         },
     )
+    # Back-compat: session data from an older sync won't have these keys
+    sync_results.setdefault("upgraded_count", 0)
+    sync_results.setdefault("upgraded_expenses", [])
+
     extra_updated = max(
         0, sync_results["updated_count"] - len(sync_results["updated_expenses"])
     )
@@ -501,6 +635,9 @@ def sync_summary(request):
         0,
         sync_results["remaining_uncategorized"]
         - len(sync_results["still_uncategorized"]),
+    )
+    extra_upgraded = max(
+        0, sync_results["upgraded_count"] - len(sync_results["upgraded_expenses"])
     )
 
     if "sync_results" in request.session:
@@ -513,5 +650,6 @@ def sync_summary(request):
             "sync_results": sync_results,
             "extra_updated": extra_updated,
             "extra_remaining": extra_remaining,
+            "extra_upgraded": extra_upgraded,
         },
     )

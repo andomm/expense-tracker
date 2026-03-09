@@ -1,8 +1,9 @@
+from dataclasses import dataclass
+
 from django.contrib.auth.models import User
 from django.db.models import Q
 
 from expenses.models import Category
-from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -27,12 +28,23 @@ def categorize_from_sources(
     return CategorizationMatch(category=None, keyword=None, source=None)
 
 
+def _category_depth(category: Category) -> int:
+    """Compute depth by walking the already-loaded parent chain."""
+    depth = 1
+    current = category
+    while current.parent_id:
+        depth += 1
+        current = current.parent
+    return depth
+
+
 def categorize_expense(
     text: str,
     user: User,
 ) -> tuple[Category | None, str | None]:
     """
     Match an expense text to a category using keyword matching.
+    More specific (deeper) categories take priority over general ones.
 
     Returns:
         (category_obj, matched_keyword) if match found
@@ -43,15 +55,23 @@ def categorize_expense(
 
     text_lower = text.lower()
 
-    # Get all categories (system + user's custom)
-    categories = Category.objects.filter(Q(is_system=True) | Q(user=user)).exclude(
-        keywords=""
+    # Load up to 5 levels of parent chain in one query
+    categories = list(
+        Category.objects.filter(Q(is_system=True) | Q(user=user))
+        .exclude(keywords="")
+        .select_related(
+            "parent",
+            "parent__parent",
+            "parent__parent__parent",
+            "parent__parent__parent__parent",
+        )
     )
 
-    # Try to find a matching category
+    # Sort deepest-first so more specific categories are checked first
+    categories.sort(key=_category_depth, reverse=True)
+
     for category in categories:
-        keywords = category.get_keywords_list()
-        for keyword in keywords:
+        for keyword in category.get_keywords_list():
             if keyword in text_lower:
                 return category, keyword
 

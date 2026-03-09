@@ -3,84 +3,125 @@
 {% block title %}Category Sync Summary{% endblock %}
 
 {% block content %}
-<h1>Category Sync Results</h1>
+<div class="space-y-6">
+  <h1>Category Sync Results</h1>
 
-<div class="sync-summary">
-    <div class="summary-stats">
-        <p><strong>Uncategorized before sync:</strong> {{ sync_results.total_uncategorized_before }}</p>
-        <p><strong>Categorized by sync:</strong> <span class="summary-success">{{ sync_results.updated_count }}</span></p>
-        <p><strong>Still uncategorized:</strong> <span class="summary-warning">{{ sync_results.remaining_uncategorized }}</span></p>
+  <div class="grid gap-3 sm:grid-cols-3">
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Uncategorized before sync</p>
+      <p class="mt-1 text-xl font-semibold text-slate-900">{{ sync_results.total_uncategorized_before }}</p>
     </div>
-
-    {% if sync_results.updated_expenses %}
-        <div class="result-list">
-            <h2>Newly Categorized Expenses</h2>
-            <p class="text-muted">Click an expense to open it in the edit view.</p>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Receiver</th>
-                        <th>Description</th>
-                        <th>Amount</th>
-                        <th>Category</th>
-                        <th>Matched keyword</th>
-                        <th>Matched from</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for expense in sync_results.updated_expenses %}
-                        <tr>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.date }}</a></td>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.receiver }}</a></td>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.description }}</a></td>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.amount }}</a></td>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.category }}</a></td>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.matched_keyword }}</a></td>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.matched_from }}</a></td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% if extra_updated > 0 %}
-                <p class="text-muted">... and {{ extra_updated }} more updated expenses.</p>
-            {% endif %}
-        </div>
-    {% endif %}
-
-    {% if sync_results.still_uncategorized %}
-        <div class="result-list">
-            <h2>Still Uncategorized</h2>
-            <p class="text-muted">Click an expense to open it in the edit view.</p>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Receiver</th>
-                        <th>Description</th>
-                        <th>Amount</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for expense in sync_results.still_uncategorized %}
-                        <tr>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.date }}</a></td>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.receiver }}</a></td>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.description }}</a></td>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.amount }}</a></td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% if extra_remaining > 0 %}
-                <p class="text-muted">... and {{ extra_remaining }} more still uncategorized expenses.</p>
-            {% endif %}
-        </div>
-    {% endif %}
-
-    <div class="action-buttons">
-        <a href="{% url 'category_list' %}" class="btn btn-secondary">Back to Categories</a>
-        <a href="{% url 'expense_list' %}" class="btn btn-primary">View Expenses</a>
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Newly categorized</p>
+      <p class="mt-1 text-xl font-semibold text-emerald-700">{{ sync_results.updated_count }}</p>
     </div>
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Still uncategorized</p>
+      <p class="mt-1 text-xl font-semibold {% if sync_results.remaining_uncategorized > 0 %}text-amber-600{% else %}text-slate-900{% endif %}">{{ sync_results.remaining_uncategorized }}</p>
+    </div>
+    {% if sync_results.upgraded_count > 0 %}
+    <div class="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+      <p class="text-xs font-semibold uppercase tracking-wide text-indigo-500">Upgraded to more specific</p>
+      <p class="mt-1 text-xl font-semibold text-indigo-700">{{ sync_results.upgraded_count }}</p>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if sync_results.updated_expenses %}
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <h2 class="mb-3">Newly Categorized Expenses</h2>
+      <p class="mb-3 text-sm text-slate-500">Click a row to edit the expense.</p>
+      <div class="overflow-x-auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th><th>Receiver</th><th>Description</th><th>Amount</th><th>Category</th><th>Matched keyword</th><th>Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for expense in sync_results.updated_expenses %}
+              <tr class="hover:bg-slate-50">
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.date }}</a></td>
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.receiver }}</a></td>
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.description }}</a></td>
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.amount }}</a></td>
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.category }}</a></td>
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.matched_keyword }}</a></td>
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.matched_from }}</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if extra_updated > 0 %}
+        <p class="mt-2 text-sm text-slate-400">… and {{ extra_updated }} more.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if sync_results.upgraded_expenses %}
+    <div class="rounded-xl border border-indigo-200 bg-white p-4">
+      <h2 class="mb-3">Upgraded to More Specific Category</h2>
+      <p class="mb-3 text-sm text-slate-500">These expenses were already categorized but matched a more specific subcategory. Click a row to edit.</p>
+      <div class="overflow-x-auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th><th>Receiver</th><th>Amount</th><th>Was</th><th>Now</th><th>Matched keyword</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for expense in sync_results.upgraded_expenses %}
+              <tr class="hover:bg-indigo-50">
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.date }}</a></td>
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.receiver }}</a></td>
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.amount }}</a></td>
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline text-slate-400">{{ expense.old_category }}</a></td>
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block font-medium text-indigo-700 no-underline">{{ expense.new_category }}</a></td>
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.matched_keyword }}</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if extra_upgraded > 0 %}
+        <p class="mt-2 text-sm text-slate-400">… and {{ extra_upgraded }} more.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  {% if sync_results.still_uncategorized %}
+    <div class="rounded-xl border border-slate-200 bg-white p-4">
+      <h2 class="mb-3">Still Uncategorized</h2>
+      <p class="mb-3 text-sm text-slate-500">No keyword matched these expenses. Click a row to categorize manually.</p>
+      <div class="overflow-x-auto">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th><th>Receiver</th><th>Description</th><th>Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for expense in sync_results.still_uncategorized %}
+              <tr class="hover:bg-slate-50">
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.date }}</a></td>
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.receiver }}</a></td>
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.description }}</a></td>
+                <td><a href="{% url 'expense_edit' expense.id %}" class="block text-inherit no-underline">{{ expense.amount }}</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if extra_remaining > 0 %}
+        <p class="mt-2 text-sm text-slate-400">… and {{ extra_remaining }} more.</p>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <div class="flex gap-2">
+    <a href="{% url 'category_list' %}" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Back to Categories</a>
+    <a href="{% url 'expense_list' %}" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">View Expenses</a>
+  </div>
 </div>
 {% endblock %}

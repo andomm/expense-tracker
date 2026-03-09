@@ -1,7 +1,9 @@
-from django.db import models
+from typing import Self
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.db import models
 
-# Create your models here.
+MAX_CATEGORY_DEPTH = 5
 
 
 class Category(models.Model):
@@ -20,6 +22,13 @@ class Category(models.Model):
         max_length=20, choices=CATEGORY_TYPE_CHOICES, default=CATEGORY_TYPE_EXPENSE
     )
     is_system = models.BooleanField(default=False)
+    parent = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="subcategories",
+    )
     keywords = models.TextField(
         blank=True,
         help_text="Comma-separated keywords for auto-matching expenses (e.g., 'lidl,prisma,k-market')",
@@ -33,11 +42,93 @@ class Category(models.Model):
     def __str__(self) -> str:
         return str(self.name)
 
+    def get_depth(self) -> int:
+        """Return the depth of this category (root = 1, max = MAX_CATEGORY_DEPTH)."""
+        depth = 1
+        current = self
+        while current.parent_id:
+            depth += 1
+            current = current.parent
+        return depth
+
+    def get_root(self) -> Self:
+        """Return the top-level ancestor (or self if already root)."""
+        current = self
+        while current.parent_id:
+            current = current.parent
+        return current
+
+    def get_all_descendant_ids(self) -> list[int]:
+        """Return PKs of all descendants via breadth-first traversal."""
+        ids: list[int] = []
+        queue = list(self.subcategories.values_list("pk", flat=True))
+        while queue:
+            ids.extend(queue)
+            queue = list(
+                Category.objects.filter(parent_id__in=queue).values_list("pk", flat=True)
+            )
+        return ids
+
+    def clean(self):
+        super().clean()
+        if not self.parent:
+            return
+
+        if self.parent_id == self.pk:
+            raise ValidationError({"parent": "A category cannot be its own parent."})
+
+        parent_depth = self.parent.get_depth()
+        if parent_depth >= MAX_CATEGORY_DEPTH:
+            raise ValidationError(
+                {
+                    "parent": (
+                        f"Maximum category depth is {MAX_CATEGORY_DEPTH}. "
+                        f"The selected parent is already at depth {parent_depth}."
+                    )
+                }
+            )
+
+        if self.category_type != self.parent.category_type:
+            raise ValidationError(
+                {"category_type": "Subcategory type must match the parent category type."}
+            )
+
+        if self.is_system and not self.parent.is_system:
+            raise ValidationError(
+                {"parent": "System categories can only use other system categories as parents."}
+            )
+
+        if (
+            not self.is_system
+            and self.parent.user_id is not None
+            and self.parent.user_id != self.user_id
+        ):
+            raise ValidationError(
+                {"parent": "Parent category must be yours or a system category."}
+            )
+
     def get_keywords_list(self) -> list[str]:
         """Return keywords as a list of lowercase strings."""
         if not self.keywords:
             return []
         return [kw.strip().lower() for kw in str(self.keywords).split(",")]
+
+    def get_all_keywords_list(self) -> list[str]:
+        """Return own keywords plus all descendant keywords without duplicates (breadth-first)."""
+        keywords: list[str] = []
+        seen: set[str] = set()
+        queue: list[Category] = [self]
+        while queue:
+            current = queue.pop(0)
+            for keyword in current.get_keywords_list():
+                if keyword and keyword not in seen:
+                    seen.add(keyword)
+                    keywords.append(keyword)
+            queue.extend(current.subcategories.all())
+        return keywords
+
+    def get_all_keywords(self) -> str:
+        return ",".join(self.get_all_keywords_list())
 
 
 class ExpenseSplitRule(models.Model):

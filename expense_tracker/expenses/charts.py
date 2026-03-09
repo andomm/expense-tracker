@@ -1,3 +1,6 @@
+from collections import defaultdict
+from decimal import Decimal
+
 from django.db.models import Sum
 from django.db.models.functions import TruncMonth
 
@@ -95,22 +98,36 @@ def create_monthly_comparison(user):
 
 
 def create_category_breakdown(user):
-    """Create category-based pie chart."""
-    category_totals = (
+    """Create category-based pie chart, rolling all expenses up to their root category."""
+    # TODO: Do not like this i would want a dynamic way to roll up categories
+    expenses = (
         Expense.objects.filter(user=user, amount__lt=0)
         .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
-        .values("category_obj__name")
-        .annotate(total_spent=Sum("user_share"))
-        .order_by("-total_spent")
+        .select_related(
+            "category_obj",
+            "category_obj__parent",
+            "category_obj__parent__parent",
+            "category_obj__parent__parent__parent",
+            "category_obj__parent__parent__parent__parent",
+        )
     )
 
-    categories = []
-    amounts = []
+    category_totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    for expense in expenses:
+        if expense.category_obj:
+            root = expense.category_obj.get_root()
+            category_name = root.name
+        else:
+            category_name = "Uncategorized"
+        category_totals[category_name] += abs(expense.user_share or Decimal("0"))
 
-    for item in category_totals:
-        cat_name = item["category_obj__name"] or "Uncategorized"
-        categories.append(cat_name)
-        amounts.append(abs(item["total_spent"]))
+    sorted_totals = sorted(
+        category_totals.items(),
+        key=lambda item: item[1],
+        reverse=True,
+    )
+    categories = [name for name, _ in sorted_totals]
+    amounts = [amount for _, amount in sorted_totals]
 
     fig = go.Figure()
     fig.add_trace(
