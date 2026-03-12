@@ -13,6 +13,7 @@ from .models import Category, Expense
 NON_EXPENSE_CATEGORY_TYPES = (
     Category.CATEGORY_TYPE_SAVING,
     Category.CATEGORY_TYPE_TRANSFER,
+    Category.CATEGORY_TYPE_INCOME,
 )
 
 
@@ -173,7 +174,11 @@ def create_income_vs_expenses(user):
             or 0
         )
         day_income = (
-            Expense.objects.filter(user=user, date=item["date"], amount__gt=0)
+            Expense.objects.filter(
+                user=user,
+                date=item["date"],
+                category_obj__category_type=Category.CATEGORY_TYPE_INCOME,
+            )
             .aggregate(total=Sum("user_share"))["total"]
             or 0
         )

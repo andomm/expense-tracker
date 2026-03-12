@@ -36,6 +36,7 @@ PREVIEW_LIMIT = 50
 NON_EXPENSE_CATEGORY_TYPES = (
     Category.CATEGORY_TYPE_SAVING,
     Category.CATEGORY_TYPE_TRANSFER,
+    Category.CATEGORY_TYPE_INCOME,
 )
 
 
@@ -148,7 +149,9 @@ def expense_list(request):
     income = sum(
         expense.user_share
         for expense in expenses
-        if expense.user_share and expense.amount > 0
+        if expense.user_share
+        and expense.category_obj
+        and expense.category_obj.category_type == Category.CATEGORY_TYPE_INCOME
     )
     balance = total_spent + income
 

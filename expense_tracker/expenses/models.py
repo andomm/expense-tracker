@@ -10,10 +10,12 @@ class Category(models.Model):
     CATEGORY_TYPE_EXPENSE = "expense"
     CATEGORY_TYPE_SAVING = "saving"
     CATEGORY_TYPE_TRANSFER = "transfer"
+    CATEGORY_TYPE_INCOME = "income"
     CATEGORY_TYPE_CHOICES = [
         (CATEGORY_TYPE_EXPENSE, "Expense"),
         (CATEGORY_TYPE_SAVING, "Saving"),
         (CATEGORY_TYPE_TRANSFER, "Transfer"),
+        (CATEGORY_TYPE_INCOME, "Income"),
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
