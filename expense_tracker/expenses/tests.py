@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
@@ -265,3 +266,76 @@ class ExpenseListCategoryFilterTests(TestCase):
             [parent_expense.pk, child_expense.pk],
             transform=lambda expense: expense.pk,
         )
+
+
+class ExpenseListSummaryTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="summaryuser", password="pass")
+        self.client.force_login(self.user)
+
+        self.expense_category = Category.objects.create(
+            user=self.user,
+            name="Groceries",
+            category_type=Category.CATEGORY_TYPE_EXPENSE,
+        )
+        self.saving_category = Category.objects.create(
+            user=self.user,
+            name="Savings",
+            category_type=Category.CATEGORY_TYPE_SAVING,
+        )
+        self.income_category = Category.objects.create(
+            user=self.user,
+            name="Salary",
+            category_type=Category.CATEGORY_TYPE_INCOME,
+        )
+        self.transfer_category = Category.objects.create(
+            user=self.user,
+            name="Transfers",
+            category_type=Category.CATEGORY_TYPE_TRANSFER,
+        )
+
+    def test_summary_includes_absolute_savings_total(self):
+        Expense.objects.create(
+            user=self.user,
+            date=date(2026, 3, 9),
+            category=self.expense_category.name,
+            category_obj=self.expense_category,
+            amount="-20.00",
+            user_share="-20.00",
+            receiver="Grocery store",
+        )
+        Expense.objects.create(
+            user=self.user,
+            date=date(2026, 3, 9),
+            category=self.saving_category.name,
+            category_obj=self.saving_category,
+            amount="-50.00",
+            user_share="-50.00",
+            receiver="Savings account",
+        )
+        Expense.objects.create(
+            user=self.user,
+            date=date(2026, 3, 9),
+            category=self.income_category.name,
+            category_obj=self.income_category,
+            amount="100.00",
+            user_share="100.00",
+            receiver="Employer",
+        )
+        Expense.objects.create(
+            user=self.user,
+            date=date(2026, 3, 9),
+            category=self.transfer_category.name,
+            category_obj=self.transfer_category,
+            amount="-30.00",
+            user_share="-30.00",
+            receiver="Own account",
+        )
+
+        response = self.client.get(reverse("expense_list"), {"month": "all"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["total_spent"], Decimal("-20.00"))
+        self.assertEqual(response.context["income"], Decimal("100.00"))
+        self.assertEqual(response.context["savings_total"], Decimal("50.00"))
+        self.assertEqual(response.context["balance"], Decimal("80.00"))

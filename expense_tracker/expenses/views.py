@@ -153,6 +153,13 @@ def expense_list(request):
         and expense.category_obj
         and expense.category_obj.category_type == Category.CATEGORY_TYPE_INCOME
     )
+    savings_total = sum(
+        abs(expense.user_share)
+        for expense in expenses
+        if expense.user_share
+        and expense.category_obj
+        and expense.category_obj.category_type == Category.CATEGORY_TYPE_SAVING
+    )
     balance = total_spent + income
 
     top_expenses = (
@@ -168,6 +175,7 @@ def expense_list(request):
             "expenses": expenses,
             "total_spent": total_spent,
             "income": income,
+            "savings_total": savings_total,
             "balance": balance,
             "top_expenses": top_expenses,
             "form": form,
