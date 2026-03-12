@@ -30,7 +30,7 @@
 			<ul class="space-y-2 text-sm text-slate-700">
 				{% for expense in top_expenses %}
 					<li class="rounded-lg bg-slate-50 px-3 py-2">
-						<span class="font-medium">{{ expense.date }}</span> · {{ expense.category_obj|default:expense.category }} · {{ expense.receiver }}
+						<span class="font-medium">{{ expense.date }}</span> · {{ expense.category_obj|default:"Uncategorized" }} · {{ expense.receiver }}
 						<span class="float-right font-semibold text-slate-900">
 							{% if expense.split_rule %}
 								€{{ expense.user_share }} ({{ expense.split_rule.split_percentage }}% of €{{ expense.amount }})
@@ -119,7 +119,7 @@
 				{% for expense in expenses %}
 					<tr class="hover:bg-slate-50">
 						<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.date }}</a></td>
-						<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.category_obj|default:expense.category }}</a></td>
+						<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.category_obj|default:"Uncategorized" }}</a></td>
 						<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.receiver }}</a></td>
 						<td>
 							<a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">
