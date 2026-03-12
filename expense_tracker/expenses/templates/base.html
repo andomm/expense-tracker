@@ -78,8 +78,10 @@
             updateButton();
             toggle.addEventListener("click", function () {
                 root.classList.toggle("dark-mode");
-                localStorage.setItem("theme", root.classList.contains("dark-mode") ? "dark" : "light");
+                const isDark = root.classList.contains("dark-mode");
+                localStorage.setItem("theme", isDark ? "dark" : "light");
                 updateButton();
+                window.dispatchEvent(new CustomEvent("themechange", { detail: { dark: isDark } }));
             });
         })();
     </script>
