@@ -339,3 +339,51 @@ class ExpenseListSummaryTests(TestCase):
         self.assertEqual(response.context["income"], Decimal("100.00"))
         self.assertEqual(response.context["savings_total"], Decimal("50.00"))
         self.assertEqual(response.context["balance"], Decimal("80.00"))
+
+
+class ExpenseAnalyticsTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="analyticsuser", password="pass")
+        self.client.force_login(self.user)
+
+        self.march_category = Category.objects.create(
+            user=self.user,
+            name="March Pie Category",
+            category_type=Category.CATEGORY_TYPE_EXPENSE,
+        )
+        self.february_category = Category.objects.create(
+            user=self.user,
+            name="February Pie Category",
+            category_type=Category.CATEGORY_TYPE_EXPENSE,
+        )
+    def test_selected_month_only_filters_pie_chart(self):
+        Expense.objects.create(
+            user=self.user,
+            date=date(2026, 3, 9),
+            category=self.march_category.name,
+            category_obj=self.march_category,
+            amount="-20.00",
+            user_share="-20.00",
+            receiver="March store",
+        )
+        Expense.objects.create(
+            user=self.user,
+            date=date(2026, 2, 9),
+            category=self.february_category.name,
+            category_obj=self.february_category,
+            amount="-30.00",
+            user_share="-30.00",
+            receiver="February store",
+        )
+
+        response = self.client.get(reverse("expenses_per_month"), {"month": "2026-03"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["active_month_label"], "March 2026")
+        self.assertEqual(response.context["prev_month_str"], "2026-02")
+        self.assertEqual(response.context["next_month_str"], "2026-04")
+        self.assertContains(response, "March Pie Category")
+        self.assertNotContains(response, "February Pie Category")
+
+        months = [item["month"].strftime("%Y-%m") for item in response.context["expenses_per_month"]]
+        self.assertEqual(months, ["2026-02", "2026-03"])

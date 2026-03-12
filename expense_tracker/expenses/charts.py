@@ -98,11 +98,18 @@ def create_monthly_comparison(user):
     return plot(fig, output_type="div", include_plotlyjs=False)
 
 
-def create_category_breakdown(user):
-    """Create category-based pie chart, rolling all expenses up to their root category."""
+def create_category_breakdown(
+    user,
+    *,
+    active_month_date=None,
+):
+    """Create category-based pie chart for the selected month."""
     # TODO: Do not like this i would want a dynamic way to roll up categories
     expenses = (
-        Expense.objects.filter(user=user, amount__lt=0)
+        Expense.objects.filter(
+            user=user,
+            amount__lt=0,
+        )
         .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
         .select_related(
             "category_obj",
@@ -112,6 +119,12 @@ def create_category_breakdown(user):
             "category_obj__parent__parent__parent__parent",
         )
     )
+
+    if active_month_date is not None:
+        expenses = expenses.filter(
+            date__year=active_month_date.year,
+            date__month=active_month_date.month,
+        )
 
     category_totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
     for expense in expenses:

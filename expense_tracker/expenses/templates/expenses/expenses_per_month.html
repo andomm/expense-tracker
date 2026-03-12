@@ -10,6 +10,24 @@
       {{ monthly_comparison|safe }}
     </div>
     <div class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div class="text-sm font-medium text-slate-600">Pie chart month</div>
+        <div class="flex flex-wrap items-center gap-2">
+          <a href="?month={{ prev_month_str }}"
+             class="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
+            ‹ Prev
+          </a>
+          <span class="text-sm font-semibold text-slate-800">{{ active_month_label }}</span>
+          {% if not is_current_month %}
+            <a href="?month={{ next_month_str }}"
+               class="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
+              Next ›
+            </a>
+          {% else %}
+            <span class="px-3 py-1.5 text-sm text-slate-300">Next ›</span>
+          {% endif %}
+        </div>
+      </div>
       {{ category_breakdown|safe }}
     </div>
     <div class="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">

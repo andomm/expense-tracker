@@ -42,6 +42,24 @@ NON_EXPENSE_CATEGORY_TYPES = (
 
 @login_required
 def expenses_per_month(request):
+    today = date.today()
+    month_param = request.GET.get("month", "")
+    active_month_date = today.replace(day=1)
+
+    if month_param:
+        try:
+            active_month_date = date.fromisoformat(month_param + "-01")
+        except ValueError:
+            pass
+
+    prev_month_str = _add_months(active_month_date, -1).strftime("%Y-%m")
+    next_month_date = _add_months(active_month_date, 1)
+    next_month_str = next_month_date.strftime("%Y-%m")
+    is_current_month = (
+        active_month_date.year == today.year and active_month_date.month == today.month
+    )
+    active_month_label = active_month_date.strftime("%B %Y")
+
     monthly_totals = (
         Expense.objects.filter(user=request.user, amount__lt=0)
         .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
@@ -53,7 +71,10 @@ def expenses_per_month(request):
 
     cumulative_graph = create_cumulative_graph(request.user)
     monthly_comparison = create_monthly_comparison(request.user)
-    category_breakdown = create_category_breakdown(request.user)
+    category_breakdown = create_category_breakdown(
+        request.user,
+        active_month_date=active_month_date,
+    )
     income_vs_expenses = create_income_vs_expenses(request.user)
 
     return render(
@@ -65,6 +86,11 @@ def expenses_per_month(request):
             "monthly_comparison": monthly_comparison,
             "category_breakdown": category_breakdown,
             "income_vs_expenses": income_vs_expenses,
+            "active_month_label": active_month_label,
+            "active_month_str": active_month_date.strftime("%Y-%m"),
+            "prev_month_str": prev_month_str,
+            "next_month_str": next_month_str,
+            "is_current_month": is_current_month,
         },
     )
 
