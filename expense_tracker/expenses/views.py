@@ -1,6 +1,8 @@
 from django.shortcuts import get_object_or_404, render, redirect
 from django.db import models
 from django.db.models import Q
+from django.urls import reverse
+from urllib.parse import urlencode
 
 from .importers import get_importer
 
@@ -8,6 +10,7 @@ from .helpers import categorize_from_sources
 
 from .forms import (
     ExpenseForm,
+    BulkCategoryUpdateForm,
     CSVUploadForm,
     SortForm,
     CategoryForm,
@@ -103,9 +106,38 @@ def _add_months(d, months):
     return date(year, month, 1)
 
 
+def _build_expense_list_url(params):
+    query_params = {}
+
+    for key in ("month", "order_by", "category_filter"):
+        value = params.get(key)
+        if value:
+            query_params[key] = value
+
+    base_url = reverse("expense_list")
+    if not query_params:
+        return base_url
+    return f"{base_url}?{urlencode(query_params)}"
+
+
+def _get_bulk_category_error_message(request, form):
+    if "expense_ids" in form.errors:
+        if request.POST.getlist("expense_ids"):
+            return "One or more selected expenses are invalid."
+        return "Select at least one expense to update."
+
+    if "category_obj" in form.errors:
+        if request.POST.get("category_obj"):
+            return "Select a valid category."
+        return "Select a category."
+
+    return "Could not update the selected expenses."
+
+
 @login_required
 def expense_list(request):
     form = SortForm(request.GET or None, user=request.user)
+    bulk_category_form = BulkCategoryUpdateForm(user=request.user)
     order_by = "-date"  # default order
     category_filter_value = ""
     active_category = None
@@ -133,7 +165,9 @@ def expense_list(request):
     )
     active_month_label = active_month_date.strftime("%B %Y")
 
-    expenses = Expense.objects.filter(user=request.user).order_by(order_by)
+    expenses = Expense.objects.filter(user=request.user).select_related(
+        "category_obj", "split_rule"
+    ).order_by(order_by)
 
     if not is_all:
         expenses = expenses.filter(
@@ -205,6 +239,7 @@ def expense_list(request):
             "balance": balance,
             "top_expenses": top_expenses,
             "form": form,
+            "bulk_category_form": bulk_category_form,
             "active_category": active_category,
             "active_month_label": active_month_label,
             "active_month_str": active_month_date.strftime("%Y-%m"),
@@ -212,6 +247,8 @@ def expense_list(request):
             "next_month_str": next_month_str,
             "is_current_month": is_current_month,
             "is_all": is_all,
+            "order_by": order_by,
+            "category_filter_value": category_filter_value,
         },
     )
 
@@ -257,6 +294,35 @@ def expense_edit(request, pk):
     return render(
         request, "expenses/expense_form.html", {"form": form, "title": "Edit Expense"}
     )
+
+
+@login_required
+def expense_bulk_category_update(request):
+    if request.method != "POST":
+        messages.error(
+            request, "Bulk category updates must be submitted from the expense list."
+        )
+        return redirect("expense_list")
+
+    redirect_url = _build_expense_list_url(request.POST)
+    form = BulkCategoryUpdateForm(request.POST, user=request.user)
+
+    if not form.is_valid():
+        messages.error(request, _get_bulk_category_error_message(request, form))
+        return redirect(redirect_url)
+
+    selected_expenses = form.cleaned_data["expense_ids"]
+    category = form.cleaned_data["category_obj"]
+    updated_count = selected_expenses.update(
+        category_obj=category,
+        category=category.name,
+    )
+
+    messages.success(
+        request,
+        f"Updated {updated_count} expense{'s' if updated_count != 1 else ''} to {category.name}.",
+    )
+    return redirect(redirect_url)
 
 
 @login_required

@@ -281,7 +281,7 @@ table {
 
 th,
 td {
-    padding: 0.7rem 0.8rem;
+    padding: 0.55rem 0.65rem;
     text-align: left;
     border-bottom: 1px solid #e2e8f0;
 }
@@ -389,7 +389,10 @@ tr:hover td {
 .expenses-table th:nth-child(1),
 .expenses-table td:nth-child(1) {
     white-space: nowrap;
-    width: 8.5rem;
+    width: 2.5rem;
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+    text-align: center;
 }
 
 .expenses-table th:nth-child(4),

@@ -160,6 +160,39 @@ class ExpenseForm(forms.ModelForm):
         return expense
 
 
+class BulkCategoryUpdateForm(forms.Form):
+    expense_ids = forms.ModelMultipleChoiceField(
+        queryset=Expense.objects.none(),
+        required=True,
+        widget=forms.MultipleHiddenInput,
+        error_messages={"required": "Select at least one expense to update."},
+    )
+    category_obj = forms.ModelChoiceField(
+        queryset=Category.objects.none(),
+        required=True,
+        label="Change selected to",
+        error_messages={"required": "Select a category."},
+    )
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.fields["expense_ids"].queryset = (
+            Expense.objects.filter(user=user)
+            if user and user.is_authenticated
+            else Expense.objects.none()
+        )
+
+        categories = list(get_user_category_queryset(user))
+        self.fields["category_obj"].queryset = get_user_category_queryset(user)
+        self.fields["category_obj"].choices = build_category_choices(categories)
+        self.fields["category_obj"].widget.attrs.update(
+            {
+                "class": "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900",
+            }
+        )
+
+
 class CategoryForm(forms.ModelForm):
     parent = forms.ModelChoiceField(
         queryset=Category.objects.none(),

@@ -268,6 +268,125 @@ class ExpenseListCategoryFilterTests(TestCase):
         )
 
 
+class BulkCategoryUpdateTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="bulk-user", password="pass")
+        self.other_user = User.objects.create_user(username="other-user", password="pass")
+        self.client.force_login(self.user)
+
+        self.original_category = Category.objects.create(
+            user=self.user,
+            name="Groceries",
+        )
+        self.new_category = Category.objects.create(
+            user=self.user,
+            name="Utilities",
+        )
+        self.other_user_category = Category.objects.create(
+            user=self.other_user,
+            name="Private Category",
+        )
+
+        self.expense_one = Expense.objects.create(
+            user=self.user,
+            date=date(2026, 3, 9),
+            category=self.original_category.name,
+            category_obj=self.original_category,
+            amount="-10.00",
+            receiver="Store one",
+        )
+        self.expense_two = Expense.objects.create(
+            user=self.user,
+            date=date(2026, 3, 10),
+            category=self.original_category.name,
+            category_obj=self.original_category,
+            amount="-20.00",
+            receiver="Store two",
+        )
+        self.other_user_expense = Expense.objects.create(
+            user=self.other_user,
+            date=date(2026, 3, 11),
+            category=self.other_user_category.name,
+            category_obj=self.other_user_category,
+            amount="-30.00",
+            receiver="Other store",
+        )
+
+    def test_updates_selected_expenses_and_preserves_context(self):
+        response = self.client.post(
+            reverse("expense_bulk_category_update"),
+            {
+                "expense_ids": [str(self.expense_one.pk), str(self.expense_two.pk)],
+                "category_obj": str(self.new_category.pk),
+                "month": "2026-03",
+                "order_by": "amount",
+                "category_filter": str(self.original_category.pk),
+            },
+            follow=True,
+        )
+
+        expected_url = (
+            f"{reverse('expense_list')}?month=2026-03&order_by=amount"
+            f"&category_filter={self.original_category.pk}"
+        )
+        self.assertRedirects(response, expected_url)
+
+        self.expense_one.refresh_from_db()
+        self.expense_two.refresh_from_db()
+        self.assertEqual(self.expense_one.category_obj, self.new_category)
+        self.assertEqual(self.expense_one.category, self.new_category.name)
+        self.assertEqual(self.expense_two.category_obj, self.new_category)
+        self.assertEqual(self.expense_two.category, self.new_category.name)
+        self.assertContains(response, "Updated 2 expenses to Utilities.")
+
+    def test_rejects_expenses_not_owned_by_current_user(self):
+        response = self.client.post(
+            reverse("expense_bulk_category_update"),
+            {
+                "expense_ids": [str(self.expense_one.pk), str(self.other_user_expense.pk)],
+                "category_obj": str(self.new_category.pk),
+                "month": "all",
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(response, f"{reverse('expense_list')}?month=all")
+        self.expense_one.refresh_from_db()
+        self.assertEqual(self.expense_one.category_obj, self.original_category)
+        self.assertContains(response, "One or more selected expenses are invalid.")
+
+    def test_rejects_invalid_category_choice(self):
+        response = self.client.post(
+            reverse("expense_bulk_category_update"),
+            {
+                "expense_ids": [str(self.expense_one.pk)],
+                "category_obj": str(self.other_user_category.pk),
+                "month": "all",
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(response, f"{reverse('expense_list')}?month=all")
+        self.expense_one.refresh_from_db()
+        self.assertEqual(self.expense_one.category_obj, self.original_category)
+        self.assertContains(response, "Select a valid category.")
+
+    def test_requires_at_least_one_selected_expense(self):
+        response = self.client.post(
+            reverse("expense_bulk_category_update"),
+            {
+                "category_obj": str(self.new_category.pk),
+                "month": "all",
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(response, f"{reverse('expense_list')}?month=all")
+        self.expense_one.refresh_from_db()
+        self.assertEqual(self.expense_one.category_obj, self.original_category)
+        self.assertContains(response, "Select at least one expense to update.")
+
+
 class ExpenseListSummaryTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="summaryuser", password="pass")
@@ -339,6 +458,22 @@ class ExpenseListSummaryTests(TestCase):
         self.assertEqual(response.context["income"], Decimal("100.00"))
         self.assertEqual(response.context["savings_total"], Decimal("50.00"))
         self.assertEqual(response.context["balance"], Decimal("80.00"))
+
+    def test_top_expenses_link_to_edit_page(self):
+        expense = Expense.objects.create(
+            user=self.user,
+            date=date(2026, 3, 9),
+            category=self.expense_category.name,
+            category_obj=self.expense_category,
+            amount="-20.00",
+            user_share="-20.00",
+            receiver="Grocery store",
+        )
+
+        response = self.client.get(reverse("expense_list"), {"month": "all"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("expense_edit", args=[expense.pk]))
 
 
 class ExpenseAnalyticsTests(TestCase):

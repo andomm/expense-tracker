@@ -33,15 +33,17 @@
 			<h3 class="mb-3">Top Expenses</h3>
 			<ul class="space-y-2 text-sm text-slate-700">
 				{% for expense in top_expenses %}
-					<li class="rounded-lg bg-slate-50 px-3 py-2">
-						<span class="font-medium">{{ expense.date }}</span> · {{ expense.category_obj|default:"Uncategorized" }} · {{ expense.receiver }}
-						<span class="float-right font-semibold text-slate-900">
-							{% if expense.split_rule %}
-								€{{ expense.user_share }} ({{ expense.split_rule.split_percentage }}% of €{{ expense.amount }})
-							{% else %}
-								€{{ expense.amount }}
-							{% endif %}
-						</span>
+					<li>
+						<a href="{% url 'expense_edit' expense.pk %}" class="block rounded-lg bg-slate-50 px-3 py-2 text-inherit no-underline hover:bg-slate-100">
+							<span class="font-medium">{{ expense.date }}</span> · {{ expense.category_obj|default:"Uncategorized" }} · {{ expense.receiver }}
+							<span class="float-right font-semibold text-slate-900">
+								{% if expense.split_rule %}
+									€{{ expense.user_share }} ({{ expense.split_rule.split_percentage }}% of €{{ expense.amount }})
+								{% else %}
+									€{{ expense.amount }}
+								{% endif %}
+							</span>
+						</a>
 					</li>
 				{% endfor %}
 			</ul>
@@ -108,45 +110,90 @@
 	</div>
 	{% endwith %}
 
-	<div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-		<table class="expenses-table">
-			<thead>
-				<tr>
-					<th>Date</th>
-					<th>Category</th>
-					<th>Receiver</th>
-					<th>Amount</th>
-					<th>Actions</th>
-				</tr>
-			</thead>
-			<tbody>
-				{% for expense in expenses %}
-					<tr class="hover:bg-slate-50">
-						<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.date }}</a></td>
-						<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.category_obj|default:"Uncategorized" }}</a></td>
-						<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.receiver }}</a></td>
-						<td>
-							<a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">
-							{% if expense.split_rule %}
-								€{{ expense.user_share }} <span class="text-xs text-slate-500">({{ expense.split_rule.split_percentage }}% of €{{ expense.amount }})</span>
-							{% else %}
-								€{{ expense.amount }}
-							{% endif %}
-							</a>
-						</td>
-						<td class="expense-actions space-x-2">
-							<a href="{% url 'expense_edit' expense.pk %}" class="font-medium text-indigo-600 hover:text-indigo-800">Edit</a>
-							<a href="{% url 'expense_delete' expense.pk %}" class="font-medium text-red-600 hover:text-red-800">Delete</a>
-						</td>
-					</tr>
-				{% empty %}
+	<form method="post" action="{% url 'expense_bulk_category_update' %}" class="space-y-4">
+		{% csrf_token %}
+		<input type="hidden" name="month" value="{% if is_all %}all{% else %}{{ active_month_str }}{% endif %}">
+		{% if order_by %}
+			<input type="hidden" name="order_by" value="{{ order_by }}">
+		{% endif %}
+		{% if category_filter_value %}
+			<input type="hidden" name="category_filter" value="{{ category_filter_value }}">
+		{% endif %}
+
+		<div class="rounded-xl border border-slate-200 bg-white p-4">
+			<div class="flex flex-wrap items-end justify-between gap-3">
+				<div>
+					<h3 class="mb-1">Bulk category update</h3>
+					<p class="text-sm text-slate-600">Select multiple expenses from the table and apply one category to all of them.</p>
+				</div>
+				<div class="flex flex-wrap items-end gap-2">
+					<div class="flex flex-col gap-1">
+						<label for="{{ bulk_category_form.category_obj.id_for_label }}" class="text-xs font-medium text-slate-500">Change selected to</label>
+						{{ bulk_category_form.category_obj }}
+					</div>
+					<button
+						type="submit"
+						id="bulk-category-submit"
+						class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						Apply
+					</button>
+				</div>
+			</div>
+		</div>
+
+		<div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+			<table class="expenses-table">
+				<thead>
 					<tr>
-						<td colspan="5" class="text-center text-slate-500">No expenses yet.</td>
+						<th class="w-6 px-1">
+							<input type="checkbox" id="select-all-expenses" aria-label="Select all expenses">
+						</th>
+						<th>Date</th>
+						<th>Category</th>
+						<th>Receiver</th>
+						<th>Amount</th>
+						<th>Actions</th>
 					</tr>
-				{% endfor %}
-			</tbody>
-		</table>
-	</div>
+				</thead>
+				<tbody>
+					{% for expense in expenses %}
+						<tr class="hover:bg-slate-50">
+							<td class="px-1 py-2">
+								<input
+									type="checkbox"
+									name="expense_ids"
+									value="{{ expense.pk }}"
+									class="expense-row-checkbox"
+									aria-label="Select expense on {{ expense.date }}"
+								>
+							</td>
+							<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.date }}</a></td>
+							<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.category_obj|default:"Uncategorized" }}</a></td>
+							<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.receiver }}</a></td>
+							<td>
+								<a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">
+								{% if expense.split_rule %}
+									€{{ expense.user_share }} <span class="text-xs text-slate-500">({{ expense.split_rule.split_percentage }}% of €{{ expense.amount }})</span>
+								{% else %}
+									€{{ expense.amount }}
+								{% endif %}
+								</a>
+							</td>
+							<td class="expense-actions space-x-2">
+								<a href="{% url 'expense_edit' expense.pk %}" class="font-medium text-indigo-600 hover:text-indigo-800">Edit</a>
+								<a href="{% url 'expense_delete' expense.pk %}" class="font-medium text-red-600 hover:text-red-800">Delete</a>
+							</td>
+						</tr>
+					{% empty %}
+						<tr>
+							<td colspan="6" class="text-center text-slate-500">No expenses yet.</td>
+						</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+		</div>
+	</form>
 
 <script>
 	document.addEventListener('DOMContentLoaded', function () {
@@ -154,6 +201,39 @@
 			const select = document.getElementById(id);
 			if (select) select.addEventListener('change', function () { this.form.submit(); });
 		});
+
+		const selectAll = document.getElementById('select-all-expenses');
+		const rowCheckboxes = Array.from(document.querySelectorAll('.expense-row-checkbox'));
+		const bulkSubmitButton = document.getElementById('bulk-category-submit');
+		const updateBulkActions = function () {
+			const checkedCount = rowCheckboxes.filter(function (checkbox) {
+				return checkbox.checked;
+			}).length;
+
+			if (bulkSubmitButton) {
+				bulkSubmitButton.disabled = checkedCount === 0;
+			}
+
+			if (selectAll) {
+				selectAll.checked = rowCheckboxes.length > 0 && checkedCount === rowCheckboxes.length;
+				selectAll.indeterminate = checkedCount > 0 && checkedCount < rowCheckboxes.length;
+			}
+		};
+
+		if (selectAll) {
+			selectAll.addEventListener('change', function () {
+				rowCheckboxes.forEach(function (checkbox) {
+					checkbox.checked = selectAll.checked;
+				});
+				updateBulkActions();
+			});
+		}
+
+		rowCheckboxes.forEach(function (checkbox) {
+			checkbox.addEventListener('change', updateBulkActions);
+		});
+
+		updateBulkActions();
 	});
 </script>
 {% endblock %}
