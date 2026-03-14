@@ -192,10 +192,7 @@ def expense_list(request):
         try:
             cat = Category.objects.select_related(
                 "parent", "parent__parent", "parent__parent__parent", "parent__parent__parent__parent"
-            ).get(
-                Q(is_system=True) | Q(user=request.user),
-                pk=int(category_filter_value),
-            )
+            ).get(user=request.user, pk=int(category_filter_value))
             descendant_ids = cat.get_all_descendant_ids()
             expenses = expenses.filter(category_obj_id__in=[cat.pk, *descendant_ids])
             has_descendants = bool(descendant_ids)
@@ -448,7 +445,7 @@ def show_expenses_amount(request):
 
 @login_required
 def category_list(request):
-    """List all categories (system + user custom) as ordered flat trees."""
+    """List the current user's categories as an ordered flat tree."""
 
     def build_flat_tree(root_queryset) -> list[tuple]:
         """
@@ -493,15 +490,13 @@ def category_list(request):
         traverse(None, 1)
         return result
 
-    system_roots = Category.objects.filter(is_system=True, parent__isnull=True)
     user_roots = Category.objects.filter(user=request.user, parent__isnull=True)
 
     return render(
         request,
         "expenses/category_list.html",
         {
-            "system_category_tree": build_flat_tree(system_roots),
-            "user_category_tree": build_flat_tree(user_roots),
+            "category_tree": build_flat_tree(user_roots),
         },
     )
 
@@ -643,14 +638,13 @@ def sync_categories(request):
 
 @login_required
 def category_add(request):
-    """Add a new custom category."""
-    category_instance = Category(user=request.user, is_system=False)
+    """Add a new category."""
+    category_instance = Category(user=request.user)
     if request.method == "POST":
         form = CategoryForm(request.POST, user=request.user, instance=category_instance)
         if form.is_valid():
             category = form.save(commit=False)
             category.user = request.user
-            category.is_system = False
             category.save()
             messages.success(
                 request, f"Category '{category.name}' created successfully!"
@@ -667,12 +661,8 @@ def category_add(request):
 
 @login_required
 def category_edit(request, pk):
-    """Edit a category's keywords (user categories and system categories)."""
-    # Allow editing system categories or user's own categories
-    if request.user.is_staff:
-        category = get_object_or_404(Category, pk=pk)
-    else:
-        category = get_object_or_404(Category, pk=pk, user=request.user)
+    """Edit one of the current user's categories."""
+    category = get_object_or_404(Category, pk=pk, user=request.user)
 
     if request.method == "POST":
         form = CategoryForm(request.POST, instance=category, user=request.user)
@@ -694,12 +684,8 @@ def category_edit(request, pk):
 
 @login_required
 def category_delete(request, pk):
-    """Delete a custom category (system categories can't be deleted)."""
+    """Delete one of the current user's categories."""
     category = get_object_or_404(Category, pk=pk, user=request.user)
-
-    if category.is_system:
-        messages.error(request, "System categories cannot be deleted.")
-        return redirect("category_list")
 
     if request.method == "POST":
         category_name = category.name

@@ -11,9 +11,7 @@ def get_user_category_queryset(user):
     if not user or not user.is_authenticated:
         return Category.objects.none()
 
-    return Category.objects.filter(
-        models.Q(is_system=True) | models.Q(user=user)
-    ).select_related(
+    return Category.objects.filter(user=user).select_related(
         "parent",
         "parent__parent",
         "parent__parent__parent",
@@ -203,7 +201,7 @@ class CategoryForm(forms.ModelForm):
     class Meta:
         model = Category
         fields = ["name", "parent", "category_type", "keywords"]
-        help_text = "Create a new custom category"
+        help_text = "Create a category"
         widgets = {
             "keywords": forms.Textarea(
                 attrs={

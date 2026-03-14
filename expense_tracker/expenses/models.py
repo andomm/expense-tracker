@@ -95,18 +95,9 @@ class Category(models.Model):
                 {"category_type": "Subcategory type must match the parent category type."}
             )
 
-        if self.is_system and not self.parent.is_system:
+        if self.parent.user_id != self.user_id:
             raise ValidationError(
-                {"parent": "System categories can only use other system categories as parents."}
-            )
-
-        if (
-            not self.is_system
-            and self.parent.user_id is not None
-            and self.parent.user_id != self.user_id
-        ):
-            raise ValidationError(
-                {"parent": "Parent category must be yours or a system category."}
+                {"parent": "Parent category must belong to the same user."}
             )
 
     def get_keywords_list(self) -> list[str]:

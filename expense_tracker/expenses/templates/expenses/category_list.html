@@ -13,7 +13,7 @@
     </div>
 
     <section class="rounded-xl border border-slate-200 bg-white p-4">
-      <h3>System Categories</h3>
+      <h3>My Categories</h3>
       <div class="overflow-x-auto">
         <table>
           <thead>
@@ -25,57 +25,7 @@
             </tr>
           </thead>
           <tbody>
-            {% for category, depth in system_category_tree %}
-              <tr {% if depth > 1 %}class="bg-slate-50/60"{% endif %}>
-                <td style="padding-left: {{ depth }}rem">
-                  <strong>{{ category.name }}</strong>
-                </td>
-                <td>{{ category.get_category_type_display }}</td>
-                <td>
-                  {% if depth == 1 %}
-                    {% if category.get_all_keywords %}
-                      <code class="keyword-pill">{{ category.get_all_keywords }}</code>
-                    {% else %}
-                      <span class="text-slate-400">No keywords</span>
-                    {% endif %}
-                  {% else %}
-                    {% if category.keywords %}
-                      <code class="keyword-pill">{{ category.keywords }}</code>
-                    {% else %}
-                      <span class="text-slate-400">No keywords</span>
-                    {% endif %}
-                  {% endif %}
-                </td>
-                <td>
-                  {% if user.is_staff %}
-                    <a href="{% url 'category_edit' category.pk %}" class="font-medium text-indigo-600 hover:text-indigo-800">Edit Keywords</a>
-                  {% else %}
-                    <span class="text-slate-400">-</span>
-                  {% endif %}
-                </td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="4" class="text-center text-slate-500">No system categories.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="rounded-xl border border-slate-200 bg-white p-4">
-      <h3>My Custom Categories</h3>
-      <div class="overflow-x-auto">
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Keywords (for CSV matching)</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for category, depth in user_category_tree %}
+            {% for category, depth in category_tree %}
               <tr {% if depth > 1 %}class="bg-slate-50/60"{% endif %}>
                 <td style="padding-left: {{ depth }}rem">
                   <strong>{{ category.name }}</strong>
@@ -103,7 +53,7 @@
               </tr>
             {% empty %}
               <tr>
-                <td colspan="4" class="text-center text-slate-500">No custom categories yet. <a class="font-medium text-indigo-600 hover:text-indigo-800" href="{% url 'category_add' %}">Add one</a></td>
+                <td colspan="4" class="text-center text-slate-500">No categories yet. <a class="font-medium text-indigo-600 hover:text-indigo-800" href="{% url 'category_add' %}">Add one</a></td>
               </tr>
             {% endfor %}
           </tbody>

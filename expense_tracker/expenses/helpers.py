@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
 from django.contrib.auth.models import User
-from django.db.models import Q
 
 from expenses.models import Category
 
@@ -57,9 +56,7 @@ def categorize_expense(
 
     # Load up to 5 levels of parent chain in one query
     categories = list(
-        Category.objects.filter(Q(is_system=True) | Q(user=user))
-        .exclude(keywords="")
-        .select_related(
+        Category.objects.filter(user=user).exclude(keywords="").select_related(
             "parent",
             "parent__parent",
             "parent__parent__parent",

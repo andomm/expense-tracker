@@ -208,6 +208,45 @@ class CategoryHierarchyTests(TestCase):
         grandchild.full_clean()  # should not raise
 
 
+class DefaultCategoryOwnershipTests(TestCase):
+    def setUp(self):
+        self.template_parent = Category.objects.create(
+            user=None,
+            name="Default Parent",
+            category_type=Category.CATEGORY_TYPE_EXPENSE,
+            keywords="rent",
+            is_system=True,
+        )
+        self.template_child = Category.objects.create(
+            user=None,
+            name="Default Child",
+            parent=self.template_parent,
+            category_type=Category.CATEGORY_TYPE_EXPENSE,
+            keywords="power",
+            is_system=True,
+        )
+
+    def test_new_user_gets_user_owned_copies_of_system_templates(self):
+        user = User.objects.create_user(username="seed-user", password="pass")
+
+        user_parent = Category.objects.get(user=user, name="Default Parent")
+        user_child = Category.objects.get(user=user, name="Default Child")
+
+        self.assertFalse(user_parent.is_system)
+        self.assertFalse(user_child.is_system)
+        self.assertEqual(user_child.parent, user_parent)
+
+    def test_categorization_uses_user_owned_copy_not_shared_template(self):
+        user = User.objects.create_user(username="seed-match-user", password="pass")
+
+        category, keyword = categorize_expense("Monthly power bill", user)
+
+        self.assertIsNotNone(category)
+        self.assertEqual(keyword, "power")
+        self.assertEqual(category.user, user)
+        self.assertFalse(category.is_system)
+
+
 class ExpenseListCategoryFilterTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="filter-user", password="pass")
@@ -422,20 +461,20 @@ class ExpenseListSummaryTests(TestCase):
             name="Groceries",
             category_type=Category.CATEGORY_TYPE_EXPENSE,
         )
-        self.saving_category = Category.objects.create(
+        self.saving_category, _ = Category.objects.get_or_create(
             user=self.user,
             name="Savings",
-            category_type=Category.CATEGORY_TYPE_SAVING,
+            defaults={"category_type": Category.CATEGORY_TYPE_SAVING},
         )
         self.income_category = Category.objects.create(
             user=self.user,
             name="Salary",
             category_type=Category.CATEGORY_TYPE_INCOME,
         )
-        self.transfer_category = Category.objects.create(
+        self.transfer_category, _ = Category.objects.get_or_create(
             user=self.user,
             name="Transfers",
-            category_type=Category.CATEGORY_TYPE_TRANSFER,
+            defaults={"category_type": Category.CATEGORY_TYPE_TRANSFER},
         )
 
     def test_summary_includes_absolute_savings_total(self):
@@ -571,6 +610,55 @@ class ExpenseEditReturnContextTests(TestCase):
         self.assertRedirects(response, expected_url)
         self.expense.refresh_from_db()
         self.assertEqual(self.expense.description, "Updated groceries")
+
+
+class CategoryManagementTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="category-owner", password="pass")
+        self.client.force_login(self.user)
+
+    def test_user_can_edit_seeded_default_category(self):
+        category = Category.objects.get(user=self.user, name="Savings")
+
+        response = self.client.post(
+            reverse("category_edit", args=[category.pk]),
+            {
+                "name": "Emergency Fund",
+                "parent": "",
+                "category_type": Category.CATEGORY_TYPE_SAVING,
+                "keywords": "save,emergency",
+            },
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("category_list"))
+        category.refresh_from_db()
+        self.assertEqual(category.name, "Emergency Fund")
+        self.assertEqual(category.keywords, "save,emergency")
+
+    def test_user_can_delete_seeded_default_category(self):
+        category = Category.objects.get(user=self.user, name="Transfers")
+
+        response = self.client.post(
+            reverse("category_delete", args=[category.pk]),
+            follow=True,
+        )
+
+        self.assertRedirects(response, reverse("category_list"))
+        self.assertFalse(Category.objects.filter(pk=category.pk).exists())
+        self.assertTrue(
+            Category.objects.filter(
+                user__isnull=True,
+                is_system=True,
+                name="Transfers",
+            ).exists()
+        )
+
+    def test_category_list_shows_single_user_owned_section(self):
+        response = self.client.get(reverse("category_list"))
+
+        self.assertContains(response, "My Categories")
+        self.assertNotContains(response, "System Categories")
 
 
 class ExpenseAnalyticsTests(TestCase):
