@@ -4,10 +4,19 @@
   <h2>{{ title }}</h2>
   <form method="post" class="mt-4 space-y-3">
     {% csrf_token %}
+    {% if return_month %}
+      <input type="hidden" name="month" value="{{ return_month }}">
+    {% endif %}
+    {% if return_order_by %}
+      <input type="hidden" name="order_by" value="{{ return_order_by }}">
+    {% endif %}
+    {% if return_category_filter %}
+      <input type="hidden" name="category_filter" value="{{ return_category_filter }}">
+    {% endif %}
     {{ form.as_p }}
     <div class="flex gap-2 pt-2">
       <button type="submit" class="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">Save</button>
-      <a href="{% url 'expense_list' %}" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Back to expenses</a>
+      <a href="{{ return_url|default:''|default_if_none:'' }}{% if not return_url %}{% url 'expense_list' %}{% endif %}" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Back to expenses</a>
     </div>
   </form>
 </div>

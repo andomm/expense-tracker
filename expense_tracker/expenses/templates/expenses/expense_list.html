@@ -34,7 +34,7 @@
 			<ul class="space-y-2 text-sm text-slate-700">
 				{% for expense in top_expenses %}
 					<li>
-						<a href="{% url 'expense_edit' expense.pk %}" class="block rounded-lg bg-slate-50 px-3 py-2 text-inherit no-underline hover:bg-slate-100">
+						<a href="{% url 'expense_edit' expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="block rounded-lg bg-slate-50 px-3 py-2 text-inherit no-underline hover:bg-slate-100">
 							<span class="font-medium">{{ expense.date }}</span> · {{ expense.category_obj|default:"Uncategorized" }} · {{ expense.receiver }}
 							<span class="float-right font-semibold text-slate-900">
 								{% if expense.split_rule %}
@@ -168,11 +168,11 @@
 									aria-label="Select expense on {{ expense.date }}"
 								>
 							</td>
-							<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.date }}</a></td>
-							<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.category_obj|default:"Uncategorized" }}</a></td>
-							<td><a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">{{ expense.receiver }}</a></td>
+							<td><a href="{% url 'expense_edit' expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="block text-inherit no-underline">{{ expense.date }}</a></td>
+							<td><a href="{% url 'expense_edit' expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="block text-inherit no-underline">{{ expense.category_obj|default:"Uncategorized" }}</a></td>
+							<td><a href="{% url 'expense_edit' expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="block text-inherit no-underline">{{ expense.receiver }}</a></td>
 							<td>
-								<a href="{% url 'expense_edit' expense.pk %}" class="block text-inherit no-underline">
+								<a href="{% url 'expense_edit' expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="block text-inherit no-underline">
 								{% if expense.split_rule %}
 									€{{ expense.user_share }} <span class="text-xs text-slate-500">({{ expense.split_rule.split_percentage }}% of €{{ expense.amount }})</span>
 								{% else %}
@@ -181,7 +181,7 @@
 								</a>
 							</td>
 							<td class="expense-actions space-x-2">
-								<a href="{% url 'expense_edit' expense.pk %}" class="font-medium text-indigo-600 hover:text-indigo-800">Edit</a>
+								<a href="{% url 'expense_edit' expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="font-medium text-indigo-600 hover:text-indigo-800">Edit</a>
 								<a href="{% url 'expense_delete' expense.pk %}" class="font-medium text-red-600 hover:text-red-800">Delete</a>
 							</td>
 						</tr>

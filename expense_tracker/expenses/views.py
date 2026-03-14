@@ -120,6 +120,16 @@ def _build_expense_list_url(params):
     return f"{base_url}?{urlencode(query_params)}"
 
 
+def _build_expense_list_query_string(params):
+    return urlencode(
+        {
+            key: value
+            for key in ("month", "order_by", "category_filter")
+            if (value := params.get(key))
+        }
+    )
+
+
 def _get_bulk_category_error_message(request, form):
     if "expense_ids" in form.errors:
         if request.POST.getlist("expense_ids"):
@@ -249,6 +259,13 @@ def expense_list(request):
             "is_all": is_all,
             "order_by": order_by,
             "category_filter_value": category_filter_value,
+            "expense_list_query_string": _build_expense_list_query_string(
+                {
+                    "month": "all" if is_all else active_month_date.strftime("%Y-%m"),
+                    "order_by": order_by,
+                    "category_filter": category_filter_value,
+                }
+            ),
         },
     )
 
@@ -284,15 +301,31 @@ def expense_add(request):
 @login_required
 def expense_edit(request, pk):
     expense = get_object_or_404(Expense, pk=pk, user=request.user)
+    return_url = _build_expense_list_url(
+        request.POST if request.method == "POST" else request.GET
+    )
     if request.method == "POST":
         form = ExpenseForm(request.POST, instance=expense, user=request.user)
         if form.is_valid():
             form.save()
-            return redirect("expense_list")
+            return redirect(return_url)
     else:
         form = ExpenseForm(instance=expense, user=request.user)
     return render(
-        request, "expenses/expense_form.html", {"form": form, "title": "Edit Expense"}
+        request,
+        "expenses/expense_form.html",
+        {
+            "form": form,
+            "title": "Edit Expense",
+            "return_url": return_url,
+            "return_month": request.GET.get("month", request.POST.get("month", "")),
+            "return_order_by": request.GET.get(
+                "order_by", request.POST.get("order_by", "")
+            ),
+            "return_category_filter": request.GET.get(
+                "category_filter", request.POST.get("category_filter", "")
+            ),
+        },
     )
 
 

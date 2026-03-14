@@ -267,6 +267,31 @@ class ExpenseListCategoryFilterTests(TestCase):
             transform=lambda expense: expense.pk,
         )
 
+    def test_expense_edit_links_preserve_filters(self):
+        expense = Expense.objects.create(
+            user=self.user,
+            date=date(2026, 3, 9),
+            category=self.parent.name,
+            category_obj=self.parent,
+            amount="-10.00",
+            receiver="Cinema",
+        )
+
+        response = self.client.get(
+            reverse("expense_list"),
+            {
+                "month": "all",
+                "order_by": "amount",
+                "category_filter": str(self.parent.pk),
+            },
+        )
+
+        edit_url = (
+            f"{reverse('expense_edit', args=[expense.pk])}"
+            f"?month=all&order_by=amount&category_filter={self.parent.pk}"
+        )
+        self.assertContains(response, edit_url.replace("&", "&amp;"), html=False)
+
 
 class BulkCategoryUpdateTests(TestCase):
     def setUp(self):
@@ -474,6 +499,78 @@ class ExpenseListSummaryTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, reverse("expense_edit", args=[expense.pk]))
+
+
+class ExpenseEditReturnContextTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="edit-user", password="pass")
+        self.client.force_login(self.user)
+        self.category = Category.objects.create(
+            user=self.user,
+            name="Groceries",
+            category_type=Category.CATEGORY_TYPE_EXPENSE,
+        )
+        self.expense = Expense.objects.create(
+            user=self.user,
+            date=date(2026, 3, 9),
+            category=self.category.name,
+            category_obj=self.category,
+            amount="-20.00",
+            user_share="-20.00",
+            receiver="Grocery store",
+            description="Weekly groceries",
+        )
+
+    def test_edit_page_back_link_preserves_list_context(self):
+        response = self.client.get(
+            reverse("expense_edit", args=[self.expense.pk]),
+            {
+                "month": "all",
+                "order_by": "amount",
+                "category_filter": str(self.category.pk),
+            },
+        )
+
+        expected_url = (
+            f"{reverse('expense_list')}?month=all&order_by=amount"
+            f"&category_filter={self.category.pk}"
+        )
+        self.assertContains(
+            response,
+            f'href="{expected_url.replace("&", "&amp;")}"',
+            html=False,
+        )
+        self.assertContains(response, 'name="month" value="all"', html=False)
+        self.assertContains(response, 'name="order_by" value="amount"', html=False)
+        self.assertContains(
+            response,
+            f'name="category_filter" value="{self.category.pk}"',
+            html=False,
+        )
+
+    def test_saving_edit_returns_to_filtered_list(self):
+        response = self.client.post(
+            reverse("expense_edit", args=[self.expense.pk]),
+            {
+                "date": "2026-03-09",
+                "description": "Updated groceries",
+                "amount": "-20.00",
+                "category_obj": str(self.category.pk),
+                "receiver": "Grocery store",
+                "month": "all",
+                "order_by": "amount",
+                "category_filter": str(self.category.pk),
+            },
+            follow=True,
+        )
+
+        expected_url = (
+            f"{reverse('expense_list')}?month=all&order_by=amount"
+            f"&category_filter={self.category.pk}"
+        )
+        self.assertRedirects(response, expected_url)
+        self.expense.refresh_from_db()
+        self.assertEqual(self.expense.description, "Updated groceries")
 
 
 class ExpenseAnalyticsTests(TestCase):
