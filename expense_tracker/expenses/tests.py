@@ -331,6 +331,56 @@ class ExpenseListCategoryFilterTests(TestCase):
         )
         self.assertContains(response, edit_url.replace("&", "&amp;"), html=False)
 
+    def test_search_filters_expenses_by_receiver_description_and_category(self):
+        utilities_expense = Expense.objects.create(
+            user=self.user,
+            date=date(2026, 3, 9),
+            category=self.other.name,
+            category_obj=self.other,
+            amount="-30.00",
+            receiver="Power company",
+            description="Monthly electricity bill",
+        )
+        gaming_expense = Expense.objects.create(
+            user=self.user,
+            date=date(2026, 3, 9),
+            category=self.child.name,
+            category_obj=self.child,
+            amount="-20.00",
+            receiver="Steam",
+            description="Game purchase",
+        )
+
+        receiver_response = self.client.get(
+            reverse("expense_list"),
+            {"month": "all", "search": "power"},
+        )
+        self.assertQuerySetEqual(
+            receiver_response.context["expenses"],
+            [utilities_expense.pk],
+            transform=lambda expense: expense.pk,
+        )
+
+        description_response = self.client.get(
+            reverse("expense_list"),
+            {"month": "all", "search": "game"},
+        )
+        self.assertQuerySetEqual(
+            description_response.context["expenses"],
+            [gaming_expense.pk],
+            transform=lambda expense: expense.pk,
+        )
+
+        category_response = self.client.get(
+            reverse("expense_list"),
+            {"month": "all", "search": "utilities"},
+        )
+        self.assertQuerySetEqual(
+            category_response.context["expenses"],
+            [utilities_expense.pk],
+            transform=lambda expense: expense.pk,
+        )
+
 
 class BulkCategoryUpdateTests(TestCase):
     def setUp(self):

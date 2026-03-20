@@ -102,6 +102,11 @@ class SortForm(forms.Form):
         required=False,
         label="Filter by category",
     )
+    search = forms.CharField(
+        required=False,
+        label="Search",
+        max_length=100,
+    )
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -110,6 +115,12 @@ class SortForm(forms.Form):
             categories,
             empty_label="All categories",
             include_uncategorized=True,
+        )
+        self.fields["search"].widget.attrs.update(
+            {
+                "placeholder": "Search receiver, description, or category",
+                "class": "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900",
+            }
         )
 
 

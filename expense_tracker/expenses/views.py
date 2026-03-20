@@ -109,7 +109,7 @@ def _add_months(d, months):
 def _build_expense_list_url(params):
     query_params = {}
 
-    for key in ("month", "order_by", "category_filter"):
+    for key in ("month", "order_by", "category_filter", "search"):
         value = params.get(key)
         if value:
             query_params[key] = value
@@ -124,7 +124,7 @@ def _build_expense_list_query_string(params):
     return urlencode(
         {
             key: value
-            for key in ("month", "order_by", "category_filter")
+            for key in ("month", "order_by", "category_filter", "search")
             if (value := params.get(key))
         }
     )
@@ -150,11 +150,13 @@ def expense_list(request):
     bulk_category_form = BulkCategoryUpdateForm(user=request.user)
     order_by = "-date"  # default order
     category_filter_value = ""
+    search_query = ""
     active_category = None
 
     if form.is_valid():
         order_by = form.cleaned_data.get("order_by") or "-date"
         category_filter_value = form.cleaned_data.get("category_filter") or ""
+        search_query = form.cleaned_data.get("search", "").strip()
 
     today = date.today()
     month_param = request.GET.get("month", "")
@@ -201,6 +203,14 @@ def expense_list(request):
             )
         except (Category.DoesNotExist, ValueError):
             pass
+
+    if search_query:
+        expenses = expenses.filter(
+            Q(receiver__icontains=search_query)
+            | Q(description__icontains=search_query)
+            | Q(category__icontains=search_query)
+            | Q(category_obj__name__icontains=search_query)
+        )
 
     # Use user_share for accurate personal calculations
     total_spent = sum(
@@ -256,11 +266,13 @@ def expense_list(request):
             "is_all": is_all,
             "order_by": order_by,
             "category_filter_value": category_filter_value,
+            "search_query": search_query,
             "expense_list_query_string": _build_expense_list_query_string(
                 {
                     "month": "all" if is_all else active_month_date.strftime("%Y-%m"),
                     "order_by": order_by,
                     "category_filter": category_filter_value,
+                    "search": search_query,
                 }
             ),
         },
@@ -322,6 +334,7 @@ def expense_edit(request, pk):
             "return_category_filter": request.GET.get(
                 "category_filter", request.POST.get("category_filter", "")
             ),
+            "return_search": request.GET.get("search", request.POST.get("search", "")),
         },
     )
 
