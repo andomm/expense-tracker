@@ -1,20 +1,16 @@
 from collections import defaultdict
 from decimal import Decimal
 
-from django.db.models import Sum
-from django.db.models.functions import TruncMonth
-
 import plotly.graph_objects as go
 from plotly.offline import plot
 
+from .allocations import (
+    NON_EXPENSE_CATEGORY_TYPES,
+    build_monthly_spending_summary,
+    get_expense_allocations,
+)
 from .models import Category, Expense
 
-
-NON_EXPENSE_CATEGORY_TYPES = (
-    Category.CATEGORY_TYPE_SAVING,
-    Category.CATEGORY_TYPE_TRANSFER,
-    Category.CATEGORY_TYPE_INCOME,
-)
 CHART_FONT_FAMILY = "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
 CHART_COLORWAY = [
     "#6366f1",
@@ -30,6 +26,27 @@ LIGHT_TEXT_COLOR = "#0f172a"
 LIGHT_MUTED_TEXT = "#475569"
 LIGHT_GRID_COLOR = "rgba(148, 163, 184, 0.18)"
 LIGHT_AXIS_COLOR = "rgba(148, 163, 184, 0.38)"
+
+
+def _expense_queryset(user):
+    return (
+        Expense.objects.filter(user=user)
+        .select_related(
+            "category_obj",
+            "category_obj__parent",
+            "category_obj__parent__parent",
+            "category_obj__parent__parent__parent",
+            "category_obj__parent__parent__parent__parent",
+        )
+        .prefetch_related(
+            "parts__category_obj",
+            "parts__category_obj__parent",
+            "parts__category_obj__parent__parent",
+            "parts__category_obj__parent__parent__parent",
+            "parts__category_obj__parent__parent__parent__parent",
+        )
+        .order_by("date", "pk")
+    )
 
 
 def _chart_layout(**overrides):
@@ -112,22 +129,27 @@ def _render_chart(fig):
 
 def create_cumulative_graph(user):
     """Create enhanced cumulative expenses graph with daily bars and cumulative line."""
-    daily_totals = (
-        Expense.objects.filter(user=user, amount__lt=0)
-        .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
-        .values("date")
-        .annotate(total_spent=Sum("user_share"))
-        .order_by("date")
-    )
+    daily_totals: dict = defaultdict(lambda: Decimal("0"))
+
+    for expense in _expense_queryset(user):
+        for allocation in get_expense_allocations(expense):
+            category_type = (
+                allocation.category.category_type
+                if allocation.category
+                else Category.CATEGORY_TYPE_EXPENSE
+            )
+            if allocation.amount >= 0 or category_type in NON_EXPENSE_CATEGORY_TYPES:
+                continue
+            daily_totals[expense.date] += abs(allocation.amount)
 
     dates = []
     daily_amounts = []
     cumulative_amounts = []
     cumulative_sum = 0
 
-    for expense in daily_totals:
-        dates.append(expense["date"].strftime("%Y-%m-%d"))
-        daily_amount = abs(expense["total_spent"])
+    for day, total_spent in sorted(daily_totals.items()):
+        dates.append(day.strftime("%Y-%m-%d"))
+        daily_amount = abs(total_spent)
         daily_amounts.append(daily_amount)
         cumulative_sum += daily_amount
         cumulative_amounts.append(cumulative_sum)
@@ -177,21 +199,14 @@ def create_cumulative_graph(user):
 
 def create_monthly_comparison(user):
     """Create monthly comparison bar chart."""
-    monthly_totals = (
-        Expense.objects.filter(user=user, amount__lt=0)
-        .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
-        .annotate(month=TruncMonth("date"))
-        .values("month")
-        .annotate(total_spent=Sum("user_share"))
-        .order_by("month")
-    )
+    monthly_totals = build_monthly_spending_summary(_expense_queryset(user))
 
     months = []
     amounts = []
 
     for item in monthly_totals:
         months.append(item["month"].strftime("%b %Y"))
-        amounts.append(abs(item["total_spent"]))
+        amounts.append(item["total_spent"])
 
     if not months:
         return _render_chart(_empty_figure("No monthly spending data yet."))
@@ -224,21 +239,7 @@ def create_category_breakdown(
     active_month_date=None,
 ):
     """Create category-based pie chart for the selected month."""
-    # TODO: Do not like this i would want a dynamic way to roll up categories
-    expenses = (
-        Expense.objects.filter(
-            user=user,
-            amount__lt=0,
-        )
-        .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
-        .select_related(
-            "category_obj",
-            "category_obj__parent",
-            "category_obj__parent__parent",
-            "category_obj__parent__parent__parent",
-            "category_obj__parent__parent__parent__parent",
-        )
-    )
+    expenses = _expense_queryset(user)
 
     if active_month_date is not None:
         expenses = expenses.filter(
@@ -248,12 +249,21 @@ def create_category_breakdown(
 
     category_totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
     for expense in expenses:
-        if expense.category_obj:
-            root = expense.category_obj.get_root()
-            category_name = root.name
-        else:
-            category_name = "Uncategorized"
-        category_totals[category_name] += abs(expense.user_share or Decimal("0"))
+        for allocation in get_expense_allocations(expense):
+            category_type = (
+                allocation.category.category_type
+                if allocation.category
+                else Category.CATEGORY_TYPE_EXPENSE
+            )
+            if allocation.amount >= 0 or category_type in NON_EXPENSE_CATEGORY_TYPES:
+                continue
+
+            if allocation.category:
+                root = allocation.category.get_root()
+                category_name = root.name
+            else:
+                category_name = "Uncategorized"
+            category_totals[category_name] += abs(allocation.amount)
 
     sorted_totals = sorted(
         category_totals.items(),
@@ -313,12 +323,22 @@ def create_category_breakdown(
 
 def create_income_vs_expenses(user):
     """Create income vs expenses chart with cumulative balance."""
-    daily_totals = (
-        Expense.objects.filter(user=user)
-        .values("date")
-        .annotate(total=Sum("user_share"))
-        .order_by("date")
-    )
+    daily_expenses: dict = defaultdict(lambda: Decimal("0"))
+    daily_income: dict = defaultdict(lambda: Decimal("0"))
+
+    for expense in _expense_queryset(user):
+        for allocation in get_expense_allocations(expense):
+            category_type = (
+                allocation.category.category_type
+                if allocation.category
+                else Category.CATEGORY_TYPE_EXPENSE
+            )
+            if category_type == Category.CATEGORY_TYPE_INCOME:
+                daily_income[expense.date] += allocation.amount
+            elif allocation.amount < 0 and category_type not in NON_EXPENSE_CATEGORY_TYPES:
+                daily_expenses[expense.date] += abs(allocation.amount)
+
+    all_dates = sorted(set(daily_expenses) | set(daily_income))
 
     dates = []
     expenses_cumsum = 0
@@ -327,28 +347,12 @@ def create_income_vs_expenses(user):
     income_list = []
     balance_list = []
 
-    for item in daily_totals:
-        date_str = item["date"].strftime("%Y-%m-%d")
+    for day in all_dates:
+        date_str = day.strftime("%Y-%m-%d")
         dates.append(date_str)
 
-        day_expenses = (
-            Expense.objects.filter(user=user, date=item["date"], amount__lt=0)
-            .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
-            .aggregate(total=Sum("user_share"))["total"]
-            or 0
-        )
-        day_income = (
-            Expense.objects.filter(
-                user=user,
-                date=item["date"],
-                category_obj__category_type=Category.CATEGORY_TYPE_INCOME,
-            )
-            .aggregate(total=Sum("user_share"))["total"]
-            or 0
-        )
-
-        expenses_cumsum += abs(day_expenses)
-        income_cumsum += day_income
+        expenses_cumsum += daily_expenses[day]
+        income_cumsum += daily_income[day]
 
         expenses_list.append(expenses_cumsum)
         income_list.append(income_cumsum)

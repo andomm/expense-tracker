@@ -1,31 +1,41 @@
-from django.shortcuts import get_object_or_404, render, redirect
+from datetime import date
+from dataclasses import dataclass, replace
+from decimal import Decimal, InvalidOperation
+from itertools import groupby
+from urllib.parse import urlencode
+
+from django.contrib import messages
+from django.contrib.auth import login
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.forms import UserCreationForm
 from django.db import models
 from django.db.models import Q
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
-from urllib.parse import urlencode
 
 from .importers import get_importer
 
+from .allocations import (
+    ExpenseAllocation,
+    build_monthly_spending_summary,
+    expense_matches_category_ids,
+    get_expense_allocations,
+    is_uncategorized_expense,
+    summarize_allocations,
+)
 from .helpers import categorize_from_sources
 
 from .forms import (
-    ExpenseForm,
     BulkCategoryUpdateForm,
     CSVUploadForm,
-    SortForm,
     CategoryForm,
+    ExpenseForm,
+    ExpensePartFormSet,
+    SortForm,
     UNCATEGORIZED_SENTINEL,
 )
 
 from .models import Expense, Category
-from django.contrib.auth.decorators import login_required
-from django.contrib.auth.forms import UserCreationForm
-from django.contrib.auth import login
-
-from django.contrib import messages
-from django.db.models import Sum
-from django.db.models.functions import TruncMonth
-from datetime import date
 
 from expenses.charts import (
     create_category_breakdown,
@@ -41,6 +51,34 @@ NON_EXPENSE_CATEGORY_TYPES = (
     Category.CATEGORY_TYPE_TRANSFER,
     Category.CATEGORY_TYPE_INCOME,
 )
+
+
+@dataclass(frozen=True)
+class ExpenseListRow:
+    allocation: ExpenseAllocation
+    group_size: int = 1
+    show_parent_cells: bool = True
+    split_component_label: str | None = None
+
+    @property
+    def expense(self) -> Expense:
+        return self.allocation.expense
+
+    @property
+    def category(self) -> Category | None:
+        return self.allocation.category
+
+    @property
+    def category_name(self) -> str:
+        return self.category.name if self.category else "Uncategorized"
+
+    @property
+    def amount(self) -> Decimal:
+        return self.allocation.amount
+
+    @property
+    def is_split_expense(self) -> bool:
+        return self.expense.has_split_parts()
 
 
 @login_required
@@ -63,13 +101,22 @@ def expenses_per_month(request):
     )
     active_month_label = active_month_date.strftime("%B %Y")
 
-    monthly_totals = (
-        Expense.objects.filter(user=request.user, amount__lt=0)
-        .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
-        .annotate(month=TruncMonth("date"))
-        .values("month")
-        .annotate(total_spent=Sum("user_share"))
-        .order_by("month")
+    monthly_totals = build_monthly_spending_summary(
+        Expense.objects.filter(user=request.user)
+        .select_related(
+            "category_obj",
+            "category_obj__parent",
+            "category_obj__parent__parent",
+            "category_obj__parent__parent__parent",
+            "category_obj__parent__parent__parent__parent",
+        )
+        .prefetch_related(
+            "parts__category_obj",
+            "parts__category_obj__parent",
+            "parts__category_obj__parent__parent",
+            "parts__category_obj__parent__parent__parent",
+            "parts__category_obj__parent__parent__parent__parent",
+        )
     )
 
     cumulative_graph = create_cumulative_graph(request.user)
@@ -144,6 +191,214 @@ def _get_bulk_category_error_message(request, form):
     return "Could not update the selected expenses."
 
 
+def _parse_decimal(value):
+    if value in (None, ""):
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+
+
+def _get_expense_form_context(request, *, return_url=None):
+    return {
+        "return_url": return_url,
+        "return_month": request.GET.get("month", request.POST.get("month", "")),
+        "return_order_by": request.GET.get("order_by", request.POST.get("order_by", "")),
+        "return_category_filter": request.GET.get(
+            "category_filter", request.POST.get("category_filter", "")
+        ),
+        "return_search": request.GET.get("search", request.POST.get("search", "")),
+    }
+
+
+def _build_expense_part_formset(*, request, expense, user, total_amount):
+    if request.method == "POST":
+        return ExpensePartFormSet(
+            request.POST,
+            instance=expense,
+            user=user,
+            total_amount=total_amount,
+        )
+    return ExpensePartFormSet(
+        instance=expense,
+        user=user,
+        total_amount=total_amount,
+    )
+
+
+def _save_expense_parts(formset, expense):
+    for deleted_form in formset.deleted_forms:
+        if deleted_form.instance.pk:
+            deleted_form.instance.delete()
+
+    order = 0
+    for part_form in formset.forms:
+        if not getattr(part_form, "cleaned_data", None):
+            continue
+        if part_form.cleaned_data.get("DELETE"):
+            continue
+
+        amount = part_form.cleaned_data.get("amount")
+        category = part_form.cleaned_data.get("category_obj")
+        if amount is None or category is None:
+            continue
+
+        part = part_form.save(commit=False)
+        part.expense = expense
+        part.order = order
+        part.save()
+        order += 1
+
+
+def _validate_split_remainder(form, formset):
+    split_total = Decimal("0")
+    for part_form in formset.forms:
+        if not getattr(part_form, "cleaned_data", None):
+            continue
+        if part_form.cleaned_data.get("DELETE"):
+            continue
+        amount = part_form.cleaned_data.get("amount")
+        if amount:
+            split_total += amount
+
+    if split_total >= abs(form.cleaned_data["amount"]):
+        return
+
+    if form.cleaned_data.get("category_obj"):
+        return
+
+    form.add_error(
+        "category_obj",
+        "Select a category for the remaining amount or split the full expense.",
+    )
+
+
+def _build_split_summary(form, formset):
+    if not form.is_bound and not form.instance.pk:
+        return None
+
+    amount = None
+    if getattr(form, "cleaned_data", None):
+        amount = form.cleaned_data.get("amount")
+    if amount is None:
+        amount = form.initial.get("amount", form.instance.amount)
+
+    amount = _parse_decimal(amount)
+    if amount is None:
+        return None
+
+    split_total = Decimal("0")
+    for part_form in formset.forms:
+        cleaned_data = getattr(part_form, "cleaned_data", None)
+        if cleaned_data:
+            if cleaned_data.get("DELETE"):
+                continue
+            part_amount = cleaned_data.get("amount")
+            if part_amount:
+                split_total += part_amount
+            continue
+
+        initial_amount = _parse_decimal(part_form.initial.get("amount"))
+        if initial_amount:
+            split_total += initial_amount
+
+    remainder = abs(amount) - split_total
+    if remainder < 0:
+        remainder = Decimal("0")
+
+    category = None
+    if getattr(form, "cleaned_data", None):
+        category = form.cleaned_data.get("category_obj")
+    if category is None:
+        category = form.initial.get("category_obj", form.instance.category_obj)
+
+    return {
+        "split_total": split_total,
+        "remainder": remainder,
+        "remainder_category_name": category.name if category else "Uncategorized",
+    }
+
+
+def _build_expense_rows(expenses):
+    rows: list[ExpenseListRow] = []
+
+    for expense in expenses:
+        allocations = get_expense_allocations(expense)
+        if not allocations:
+            continue
+
+        if not expense.has_split_parts():
+            rows.append(ExpenseListRow(allocation=allocations[0]))
+            continue
+
+        prefetched_parts = getattr(expense, "_prefetched_objects_cache", {}).get("parts")
+        part_count = (
+            len(prefetched_parts)
+            if prefetched_parts is not None
+            else expense.parts.count()
+        )
+
+        for index, allocation in enumerate(allocations):
+            if index < part_count:
+                split_component_label = f"Split part {index + 1}"
+            else:
+                split_component_label = "Remainder"
+            rows.append(
+                ExpenseListRow(
+                    allocation=allocation,
+                    split_component_label=split_component_label,
+                )
+            )
+
+    return rows
+
+
+def _finalize_expense_rows(rows):
+    finalized_rows: list[ExpenseListRow] = []
+
+    for _, group in groupby(rows, key=lambda row: row.expense.pk):
+        group_rows = list(group)
+        group_size = len(group_rows)
+        for index, row in enumerate(group_rows):
+            finalized_rows.append(
+                replace(
+                    row,
+                    group_size=group_size,
+                    show_parent_cells=index == 0,
+                )
+            )
+
+    return finalized_rows
+
+
+def _expense_row_matches_search(row, search_query):
+    lowered_query = search_query.lower()
+    expense = row.expense
+    searchable_values = [
+        expense.receiver,
+        expense.description,
+        expense.category,
+        expense.category_obj.name if expense.category_obj else "",
+        row.category_name,
+    ]
+    return any(lowered_query in (value or "").lower() for value in searchable_values)
+
+
+def _unique_expenses_from_rows(rows):
+    seen_ids = set()
+    visible_expenses = []
+
+    for row in rows:
+        expense = row.expense
+        if expense.pk in seen_ids:
+            continue
+        seen_ids.add(expense.pk)
+        visible_expenses.append(expense)
+
+    return visible_expenses
+
+
 @login_required
 def expense_list(request):
     form = SortForm(request.GET or None, user=request.user)
@@ -152,6 +407,7 @@ def expense_list(request):
     category_filter_value = ""
     search_query = ""
     active_category = None
+    category_ids = None
 
     if form.is_valid():
         order_by = form.cleaned_data.get("order_by") or "-date"
@@ -177,18 +433,45 @@ def expense_list(request):
     )
     active_month_label = active_month_date.strftime("%B %Y")
 
-    expenses = Expense.objects.filter(user=request.user).select_related(
-        "category_obj", "split_rule"
-    ).order_by(order_by)
+    expenses_queryset = (
+        Expense.objects.filter(user=request.user)
+        .select_related(
+            "category_obj",
+            "category_obj__parent",
+            "category_obj__parent__parent",
+            "category_obj__parent__parent__parent",
+            "category_obj__parent__parent__parent__parent",
+            "split_rule",
+        )
+        .prefetch_related(
+            "parts__category_obj",
+            "parts__category_obj__parent",
+            "parts__category_obj__parent__parent",
+            "parts__category_obj__parent__parent__parent",
+            "parts__category_obj__parent__parent__parent__parent",
+        )
+        .order_by(order_by)
+    )
 
     if not is_all:
-        expenses = expenses.filter(
+        expenses_queryset = expenses_queryset.filter(
             date__year=active_month_date.year,
             date__month=active_month_date.month,
         )
 
+    if search_query:
+        expenses_queryset = expenses_queryset.filter(
+            Q(receiver__icontains=search_query)
+            | Q(description__icontains=search_query)
+            | Q(category__icontains=search_query)
+            | Q(category_obj__name__icontains=search_query)
+            | Q(parts__category_obj__name__icontains=search_query)
+        ).distinct()
+
+    expenses = list(expenses_queryset)
+
     if category_filter_value == UNCATEGORIZED_SENTINEL:
-        expenses = expenses.filter(category_obj__isnull=True)
+        expenses = [expense for expense in expenses if is_uncategorized_expense(expense)]
         active_category = "Uncategorized"
     elif category_filter_value:
         try:
@@ -196,7 +479,12 @@ def expense_list(request):
                 "parent", "parent__parent", "parent__parent__parent", "parent__parent__parent__parent"
             ).get(user=request.user, pk=int(category_filter_value))
             descendant_ids = cat.get_all_descendant_ids()
-            expenses = expenses.filter(category_obj_id__in=[cat.pk, *descendant_ids])
+            category_ids = {cat.pk, *descendant_ids}
+            expenses = [
+                expense
+                for expense in expenses
+                if expense_matches_category_ids(expense, category_ids)
+            ]
             has_descendants = bool(descendant_ids)
             active_category = (
                 f"{cat.name} (+ subcategories)" if has_descendants else cat.name
@@ -204,52 +492,51 @@ def expense_list(request):
         except (Category.DoesNotExist, ValueError):
             pass
 
+    expense_rows = _build_expense_rows(expenses)
     if search_query:
-        expenses = expenses.filter(
-            Q(receiver__icontains=search_query)
-            | Q(description__icontains=search_query)
-            | Q(category__icontains=search_query)
-            | Q(category_obj__name__icontains=search_query)
-        )
+        expense_rows = [
+            row
+            for row in expense_rows
+            if _expense_row_matches_search(row, search_query)
+        ]
 
-    # Use user_share for accurate personal calculations
-    total_spent = sum(
-        expense.user_share
-        for expense in expenses
-        if expense.user_share
-        and expense.amount < 0
-        and not (
-            expense.category_obj
-            and expense.category_obj.category_type in NON_EXPENSE_CATEGORY_TYPES
-        )
-    )
-    income = sum(
-        expense.user_share
-        for expense in expenses
-        if expense.user_share
-        and expense.category_obj
-        and expense.category_obj.category_type == Category.CATEGORY_TYPE_INCOME
-    )
-    savings_total = sum(
-        abs(expense.user_share)
-        for expense in expenses
-        if expense.user_share
-        and expense.category_obj
-        and expense.category_obj.category_type == Category.CATEGORY_TYPE_SAVING
-    )
-    balance = total_spent + income
+    if category_filter_value == UNCATEGORIZED_SENTINEL:
+        expense_rows = [row for row in expense_rows if row.category is None]
+    elif category_ids:
+        expense_rows = [
+            row
+            for row in expense_rows
+            if row.category and row.category.pk in category_ids
+        ]
 
-    top_expenses = (
-        expenses.filter(amount__lt=0)
-        .exclude(category_obj__category_type__in=NON_EXPENSE_CATEGORY_TYPES)
-        .order_by("amount")[:5]
-    )
+    expense_rows = _finalize_expense_rows(expense_rows)
+    expenses = _unique_expenses_from_rows(expense_rows)
+
+    summary = summarize_allocations(row.allocation for row in expense_rows)
+    total_spent = summary["total_spent"]
+    income = summary["income"]
+    savings_total = summary["savings_total"]
+    balance = summary["balance"]
+
+    top_expenses = sorted(
+        [
+            row
+            for row in expense_rows
+            if row.amount < 0
+            and not (
+                row.category
+                and row.category.category_type in NON_EXPENSE_CATEGORY_TYPES
+            )
+        ],
+        key=lambda row: row.amount,
+    )[:5]
 
     return render(
         request,
         "expenses/expense_list.html",
         {
             "expenses": expenses,
+            "expense_rows": expense_rows,
             "total_spent": total_spent,
             "income": income,
             "savings_total": savings_total,
@@ -293,17 +580,45 @@ def signup(request):
 
 @login_required
 def expense_add(request):
-    if request.method == "POST":
-        form = ExpenseForm(request.POST, user=request.user)
-        if form.is_valid():
-            expense = form.save(commit=False)
-            expense.user = request.user
-            expense.save()
-            return redirect("expense_list")
-    else:
-        form = ExpenseForm(user=request.user)
+    expense = Expense(user=request.user)
+    form = ExpenseForm(request.POST or None, instance=expense, user=request.user)
+    total_amount = (
+        _parse_decimal(request.POST.get("amount"))
+        if request.method == "POST"
+        else expense.amount
+    )
+    formset = _build_expense_part_formset(
+        request=request,
+        expense=expense,
+        user=request.user,
+        total_amount=total_amount,
+    )
+
+    if request.method == "POST" and form.is_valid():
+        formset = _build_expense_part_formset(
+            request=request,
+            expense=expense,
+            user=request.user,
+            total_amount=form.cleaned_data["amount"],
+        )
+        if formset.is_valid():
+            _validate_split_remainder(form, formset)
+            if not form.errors:
+                expense = form.save(commit=False)
+                expense.user = request.user
+                expense.save()
+                _save_expense_parts(formset, expense)
+                return redirect("expense_list")
+
     return render(
-        request, "expenses/expense_form.html", {"form": form, "title": "Add Expense"}
+        request,
+        "expenses/expense_form.html",
+        {
+            "form": form,
+            "formset": formset,
+            "title": "Add Expense",
+            "split_summary": _build_split_summary(form, formset),
+        },
     )
 
 
@@ -313,28 +628,41 @@ def expense_edit(request, pk):
     return_url = _build_expense_list_url(
         request.POST if request.method == "POST" else request.GET
     )
-    if request.method == "POST":
-        form = ExpenseForm(request.POST, instance=expense, user=request.user)
-        if form.is_valid():
-            form.save()
-            return redirect(return_url)
-    else:
-        form = ExpenseForm(instance=expense, user=request.user)
+    form = ExpenseForm(request.POST or None, instance=expense, user=request.user)
+    total_amount = (
+        _parse_decimal(request.POST.get("amount"))
+        if request.method == "POST"
+        else expense.amount
+    )
+    formset = _build_expense_part_formset(
+        request=request,
+        expense=expense,
+        user=request.user,
+        total_amount=total_amount,
+    )
+
+    if request.method == "POST" and form.is_valid():
+        formset = _build_expense_part_formset(
+            request=request,
+            expense=expense,
+            user=request.user,
+            total_amount=form.cleaned_data["amount"],
+        )
+        if formset.is_valid():
+            _validate_split_remainder(form, formset)
+            if not form.errors:
+                form.save()
+                _save_expense_parts(formset, expense)
+                return redirect(return_url)
     return render(
         request,
         "expenses/expense_form.html",
         {
             "form": form,
+            "formset": formset,
             "title": "Edit Expense",
-            "return_url": return_url,
-            "return_month": request.GET.get("month", request.POST.get("month", "")),
-            "return_order_by": request.GET.get(
-                "order_by", request.POST.get("order_by", "")
-            ),
-            "return_category_filter": request.GET.get(
-                "category_filter", request.POST.get("category_filter", "")
-            ),
-            "return_search": request.GET.get("search", request.POST.get("search", "")),
+            "split_summary": _build_split_summary(form, formset),
+            **_get_expense_form_context(request, return_url=return_url),
         },
     )
 

@@ -1,7 +1,16 @@
+from decimal import Decimal
+
 from django import forms
+from django.forms import BaseInlineFormSet, inlineformset_factory
 from django.db import models
 
-from .models import Expense, Category, ExpenseSplitRule, MAX_CATEGORY_DEPTH
+from .models import (
+    Expense,
+    ExpensePart,
+    Category,
+    ExpenseSplitRule,
+    MAX_CATEGORY_DEPTH,
+)
 
 
 UNCATEGORIZED_SENTINEL = "uncategorized"
@@ -200,6 +209,73 @@ class BulkCategoryUpdateForm(forms.Form):
                 "class": "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900",
             }
         )
+
+
+class ExpensePartForm(forms.ModelForm):
+    category_obj = forms.ModelChoiceField(
+        queryset=Category.objects.none(),
+        label="Split category",
+    )
+    amount = forms.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        min_value=Decimal("0.01"),
+        label="Split amount",
+    )
+
+    class Meta:
+        model = ExpensePart
+        fields = ["amount", "category_obj"]
+
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        categories = list(get_user_category_queryset(user))
+        self.fields["category_obj"].queryset = get_user_category_queryset(user)
+        self.fields["category_obj"].choices = build_category_choices(categories)
+
+
+class BaseExpensePartFormSet(BaseInlineFormSet):
+    def __init__(self, *args, user=None, total_amount=None, **kwargs):
+        self.user = user
+        self.total_amount = abs(total_amount) if total_amount is not None else None
+        super().__init__(*args, **kwargs)
+
+    def get_form_kwargs(self, index):
+        kwargs = super().get_form_kwargs(index)
+        kwargs["user"] = self.user
+        return kwargs
+
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+
+        if self.total_amount is None:
+            return
+
+        split_total = Decimal("0")
+        for form in self.forms:
+            if not form.cleaned_data or form.cleaned_data.get("DELETE"):
+                continue
+            amount = form.cleaned_data.get("amount")
+            if amount:
+                split_total += amount
+
+        if split_total > self.total_amount:
+            raise forms.ValidationError(
+                "Split amounts cannot exceed the expense amount."
+            )
+
+
+ExpensePartFormSet = inlineformset_factory(
+    Expense,
+    ExpensePart,
+    form=ExpensePartForm,
+    formset=BaseExpensePartFormSet,
+    fields=["amount", "category_obj"],
+    extra=0,
+    can_delete=True,
+)
 
 
 class CategoryForm(forms.ModelForm):

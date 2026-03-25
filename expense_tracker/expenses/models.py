@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Self
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -168,3 +169,75 @@ class Expense(models.Model):
 
     def __str__(self):
         return f"{self.date} - {self.description or 'No description'} - €{self.amount}"
+
+    def get_source_amount(self) -> Decimal:
+        return self.amount or Decimal("0")
+
+    def get_effective_user_amount(self) -> Decimal:
+        return self.user_share if self.user_share is not None else self.get_source_amount()
+
+    def get_split_total(self) -> Decimal:
+        prefetched_parts = getattr(self, "_prefetched_objects_cache", {}).get("parts")
+        parts = prefetched_parts if prefetched_parts is not None else self.parts.all()
+        return sum((part.amount for part in parts), Decimal("0"))
+
+    def get_remainder_amount(self) -> Decimal:
+        remainder = abs(self.get_source_amount()) - self.get_split_total()
+        if remainder < 0:
+            return Decimal("0")
+        return remainder
+
+    def has_split_parts(self) -> bool:
+        prefetched_parts = getattr(self, "_prefetched_objects_cache", {}).get("parts")
+        if prefetched_parts is not None:
+            return bool(prefetched_parts)
+        return self.parts.exists()
+
+    def get_category_display(self) -> str:
+        if not self.has_split_parts():
+            return self.category_obj.name if self.category_obj else "Uncategorized"
+
+        prefetched_parts = getattr(self, "_prefetched_objects_cache", {}).get("parts")
+        part_count = (
+            len(prefetched_parts)
+            if prefetched_parts is not None
+            else self.parts.count()
+        )
+        suffix = "part" if part_count == 1 else "parts"
+        if self.get_remainder_amount() > 0:
+            remainder_category = self.category_obj.name if self.category_obj else "Uncategorized"
+            return f"Split ({remainder_category} + {part_count} {suffix})"
+        return f"Split ({part_count} {suffix})"
+
+
+class ExpensePart(models.Model):
+    expense = models.ForeignKey(
+        Expense,
+        on_delete=models.CASCADE,
+        related_name="parts",
+    )
+    category_obj = models.ForeignKey(Category, on_delete=models.CASCADE)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["order", "pk"]
+
+    def clean(self):
+        super().clean()
+        if self.amount is None:
+            return
+        if self.amount <= 0:
+            raise ValidationError({"amount": "Split part amount must be greater than zero."})
+
+        if (
+            self.expense_id
+            and self.category_obj_id
+            and self.category_obj.user_id != self.expense.user_id
+        ):
+            raise ValidationError(
+                {"category_obj": "Split part category must belong to the same user."}
+            )
+
+    def __str__(self):
+        return f"{self.expense} -> {self.category_obj} ({self.amount})"
