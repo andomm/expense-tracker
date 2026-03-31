@@ -92,20 +92,13 @@
                   {% endfor %}
                 </td>
                 <td class="text-center">
-                  {% if split_form.instance.pk %}
-                    <label class="inline-flex items-center gap-2 text-sm text-slate-600">
-                      {{ split_form.DELETE }}
-                      Delete
-                    </label>
-                  {% else %}
-                    <button
-                      type="button"
-                      class="remove-split-row rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
-                    >
-                      Remove
-                    </button>
-                    <span class="hidden">{{ split_form.DELETE }}</span>
-                  {% endif %}
+                  <button
+                    type="button"
+                    class="remove-split-row rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                  >
+                    Remove
+                  </button>
+                  <span class="hidden">{{ split_form.DELETE }}</span>
                 </td>
               </tr>
             {% empty %}

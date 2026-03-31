@@ -36,11 +36,8 @@
 					<li>
 						<a href="{% url 'expense_edit' row.expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="block rounded-lg bg-slate-50 px-3 py-2 text-inherit no-underline hover:bg-slate-100">
 							<span class="font-medium">{{ row.expense.date }}</span> · {{ row.category_name }} · {{ row.expense.receiver }}
-							{% if row.split_component_label %}
-								<span class="text-xs text-slate-500">({{ row.split_component_label }}, split #{{ row.expense.pk }})</span>
-							{% endif %}
 							<span class="float-right font-semibold text-slate-900">
-								{% if row.expense.split_rule and not row.is_split_expense %}
+								{% if row.expense.split_rule %}
 									€{{ row.amount }} ({{ row.expense.split_rule.split_percentage }}% of €{{ row.expense.amount }})
 								{% else %}
 									€{{ row.amount }}
@@ -178,55 +175,43 @@
 				<tbody>
 					{% for row in expense_rows %}
 						<tr class="hover:bg-slate-50">
-							{% if row.show_parent_cells %}
-								<td class="px-1 py-2 align-top" rowspan="{{ row.group_size }}">
-									<input
-										type="checkbox"
-										name="expense_ids"
-										value="{{ row.expense.pk }}"
-										class="expense-row-checkbox"
-										aria-label="Select expense on {{ row.expense.date }}"
-									>
-								</td>
-								<td class="align-top" rowspan="{{ row.group_size }}">
-									<a href="{% url 'expense_edit' row.expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="block text-inherit no-underline">
-										{{ row.expense.date }}
-										{% if row.is_split_expense %}
-											<div class="text-xs text-slate-500">Split #{{ row.expense.pk }}</div>
-										{% endif %}
-									</a>
-								</td>
-							{% endif %}
+							<td class="px-1 py-2">
+								<input
+									type="checkbox"
+									name="expense_ids"
+									value="{{ row.expense.pk }}"
+									class="expense-row-checkbox"
+									aria-label="Select expense on {{ row.expense.date }}"
+								>
+							</td>
+							<td>
+								<a href="{% url 'expense_edit' row.expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="block text-inherit no-underline">
+									{{ row.expense.date }}
+								</a>
+							</td>
 							<td>
 								<a href="{% url 'expense_edit' row.expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="block text-inherit no-underline">
 									{{ row.category_name }}
-									{% if row.split_component_label %}
-										<div class="text-xs text-slate-500">{{ row.split_component_label }}</div>
-									{% endif %}
 								</a>
 							</td>
-							{% if row.show_parent_cells %}
-								<td class="align-top" rowspan="{{ row.group_size }}">
-									<a href="{% url 'expense_edit' row.expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="block text-inherit no-underline">
-										{{ row.expense.receiver|default:"—" }}
-									</a>
-								</td>
-							{% endif %}
 							<td>
 								<a href="{% url 'expense_edit' row.expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="block text-inherit no-underline">
-								{% if row.expense.split_rule and not row.is_split_expense %}
+									{{ row.expense.receiver|default:"—" }}
+								</a>
+							</td>
+							<td>
+								<a href="{% url 'expense_edit' row.expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="block text-inherit no-underline">
+								{% if row.expense.split_rule %}
 									€{{ row.amount }} <span class="text-xs text-slate-500">({{ row.expense.split_rule.split_percentage }}% of €{{ row.expense.amount }})</span>
 								{% else %}
 									€{{ row.amount }}
 								{% endif %}
 								</a>
 							</td>
-							{% if row.show_parent_cells %}
-								<td class="expense-actions space-x-2 align-top" rowspan="{{ row.group_size }}">
-									<a href="{% url 'expense_edit' row.expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="font-medium text-indigo-600 hover:text-indigo-800">Edit</a>
-									<a href="{% url 'expense_delete' row.expense.pk %}" class="font-medium text-red-600 hover:text-red-800">Delete</a>
-								</td>
-							{% endif %}
+							<td class="expense-actions space-x-2">
+								<a href="{% url 'expense_edit' row.expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="font-medium text-indigo-600 hover:text-indigo-800">Edit</a>
+								<a href="{% url 'expense_delete' row.expense.pk %}" class="font-medium text-red-600 hover:text-red-800">Delete</a>
+							</td>
 						</tr>
 					{% empty %}
 						<tr>

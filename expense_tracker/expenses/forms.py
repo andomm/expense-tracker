@@ -1,12 +1,11 @@
 from decimal import Decimal
 
 from django import forms
-from django.forms import BaseInlineFormSet, inlineformset_factory
+from django.forms import BaseFormSet, formset_factory
 from django.db import models
 
 from .models import (
     Expense,
-    ExpensePart,
     Category,
     ExpenseSplitRule,
     MAX_CATEGORY_DEPTH,
@@ -211,7 +210,7 @@ class BulkCategoryUpdateForm(forms.Form):
         )
 
 
-class ExpensePartForm(forms.ModelForm):
+class SplitRowForm(forms.Form):
     category_obj = forms.ModelChoiceField(
         queryset=Category.objects.none(),
         label="Split category",
@@ -223,10 +222,6 @@ class ExpensePartForm(forms.ModelForm):
         label="Split amount",
     )
 
-    class Meta:
-        model = ExpensePart
-        fields = ["amount", "category_obj"]
-
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         categories = list(get_user_category_queryset(user))
@@ -234,16 +229,10 @@ class ExpensePartForm(forms.ModelForm):
         self.fields["category_obj"].choices = build_category_choices(categories)
 
 
-class BaseExpensePartFormSet(BaseInlineFormSet):
-    def __init__(self, *args, user=None, total_amount=None, **kwargs):
-        self.user = user
+class BaseSplitRowFormSet(BaseFormSet):
+    def __init__(self, *args, total_amount=None, **kwargs):
         self.total_amount = abs(total_amount) if total_amount is not None else None
         super().__init__(*args, **kwargs)
-
-    def get_form_kwargs(self, index):
-        kwargs = super().get_form_kwargs(index)
-        kwargs["user"] = self.user
-        return kwargs
 
     def clean(self):
         super().clean()
@@ -267,12 +256,9 @@ class BaseExpensePartFormSet(BaseInlineFormSet):
             )
 
 
-ExpensePartFormSet = inlineformset_factory(
-    Expense,
-    ExpensePart,
-    form=ExpensePartForm,
-    formset=BaseExpensePartFormSet,
-    fields=["amount", "category_obj"],
+SplitRowFormSet = formset_factory(
+    SplitRowForm,
+    formset=BaseSplitRowFormSet,
     extra=0,
     can_delete=True,
 )

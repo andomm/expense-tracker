@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .helpers import categorize_expense, categorize_from_sources
-from .models import Category, Expense, ExpensePart
+from .models import Category, Expense
 
 
 class CategorizeExpenseTests(TestCase):
@@ -671,7 +671,7 @@ class ExpenseSplitTests(TestCase):
         self.utilities = Category.objects.create(user=self.user, name="Utilities")
         self.savings = Category.objects.get(user=self.user, name="Savings")
 
-    def _formset_management(self, *, total_forms, initial_forms):
+    def _formset_management(self, *, total_forms, initial_forms=0):
         return {
             "parts-TOTAL_FORMS": str(total_forms),
             "parts-INITIAL_FORMS": str(initial_forms),
@@ -679,7 +679,7 @@ class ExpenseSplitTests(TestCase):
             "parts-MAX_NUM_FORMS": "1000",
         }
 
-    def test_can_create_split_expense_with_remainder_on_parent_category(self):
+    def test_split_creates_new_expenses_and_keeps_remainder(self):
         response = self.client.post(
             reverse("expense_add"),
             {
@@ -691,47 +691,49 @@ class ExpenseSplitTests(TestCase):
                 "receiver": "Superstore",
                 "parts-0-amount": "30.00",
                 "parts-0-category_obj": str(self.sports.pk),
-                **self._formset_management(total_forms=1, initial_forms=0),
+                **self._formset_management(total_forms=1),
             },
             follow=True,
         )
 
         self.assertRedirects(response, reverse("expense_list"))
-        expense = Expense.objects.get(description="Sports store")
-        self.assertEqual(expense.get_remainder_amount(), Decimal("70.00"))
-        self.assertEqual(expense.parts.count(), 1)
-        self.assertEqual(expense.parts.get().category_obj, self.sports)
+        self.assertEqual(Expense.objects.filter(user=self.user).count(), 2)
 
-        sports_response = self.client.get(
-            reverse("expense_list"),
-            {"month": "all", "category_filter": str(self.sports.pk)},
-        )
-        general_response = self.client.get(
-            reverse("expense_list"),
-            {"month": "all", "category_filter": str(self.general.pk)},
+        remainder = Expense.objects.get(category_obj=self.general, user=self.user)
+        split_expense = Expense.objects.get(category_obj=self.sports, user=self.user)
+
+        self.assertEqual(remainder.amount, Decimal("-70.00"))
+        self.assertEqual(remainder.receiver, "Superstore")
+        self.assertEqual(split_expense.amount, Decimal("-30.00"))
+        self.assertEqual(split_expense.receiver, "Superstore")
+        self.assertEqual(split_expense.date, date(2026, 3, 9))
+
+    def test_full_split_deletes_original_expense(self):
+        response = self.client.post(
+            reverse("expense_add"),
+            {
+                "date": "2026-03-09",
+                "description": "Full split",
+                "amount": "-100.00",
+                "category_obj": "",
+                "split_rule": "",
+                "receiver": "Superstore",
+                "parts-0-amount": "60.00",
+                "parts-0-category_obj": str(self.sports.pk),
+                "parts-1-amount": "40.00",
+                "parts-1-category_obj": str(self.utilities.pk),
+                **self._formset_management(total_forms=2),
+            },
+            follow=True,
         )
 
-        self.assertEqual(
-            [listed_expense.pk for listed_expense in sports_response.context["expenses"]],
-            [expense.pk],
-        )
-        self.assertEqual(
-            [listed_expense.pk for listed_expense in general_response.context["expenses"]],
-            [expense.pk],
-        )
-        self.assertEqual(
-            [row.category_name for row in sports_response.context["expense_rows"]],
-            ["Sports"],
-        )
-        self.assertEqual(
-            [row.amount for row in sports_response.context["expense_rows"]],
-            [Decimal("-30.00")],
-        )
-        self.assertEqual(
-            [row.category_name for row in general_response.context["expense_rows"]],
-            ["General"],
-        )
-        self.assertEqual(general_response.context["total_spent"], Decimal("-70.00"))
+        self.assertRedirects(response, reverse("expense_list"))
+        expenses = list(Expense.objects.filter(user=self.user).order_by("amount"))
+        self.assertEqual(len(expenses), 2)
+        self.assertEqual(expenses[0].amount, Decimal("-60.00"))
+        self.assertEqual(expenses[0].category_obj, self.sports)
+        self.assertEqual(expenses[1].amount, Decimal("-40.00"))
+        self.assertEqual(expenses[1].category_obj, self.utilities)
 
     def test_split_amounts_cannot_exceed_expense_amount(self):
         response = self.client.post(
@@ -747,7 +749,7 @@ class ExpenseSplitTests(TestCase):
                 "parts-0-category_obj": str(self.sports.pk),
                 "parts-1-amount": "30.00",
                 "parts-1-category_obj": str(self.utilities.pk),
-                **self._formset_management(total_forms=2, initial_forms=0),
+                **self._formset_management(total_forms=2),
             },
         )
 
@@ -755,7 +757,7 @@ class ExpenseSplitTests(TestCase):
         self.assertContains(response, "Split amounts cannot exceed the expense amount.")
         self.assertFalse(Expense.objects.filter(description="Too much split").exists())
 
-    def test_can_edit_split_parts(self):
+    def test_split_from_edit_creates_new_expenses(self):
         expense = Expense.objects.create(
             user=self.user,
             date=date(2026, 3, 9),
@@ -765,53 +767,48 @@ class ExpenseSplitTests(TestCase):
             receiver="Superstore",
             description="Editable split",
         )
-        part = ExpensePart.objects.create(
-            expense=expense,
-            category_obj=self.sports,
-            amount="30.00",
-        )
 
         response = self.client.post(
             reverse("expense_edit", args=[expense.pk]),
             {
                 "date": "2026-03-09",
-                "description": "Editable split updated",
+                "description": "Editable split",
                 "amount": "-100.00",
                 "category_obj": str(self.general.pk),
                 "split_rule": "",
                 "receiver": "Superstore",
                 "month": "all",
-                "parts-0-id": str(part.pk),
                 "parts-0-amount": "40.00",
                 "parts-0-category_obj": str(self.utilities.pk),
-                **self._formset_management(total_forms=1, initial_forms=1),
+                **self._formset_management(total_forms=1),
             },
             follow=True,
         )
 
         self.assertRedirects(response, f"{reverse('expense_list')}?month=all")
+        self.assertEqual(Expense.objects.filter(user=self.user).count(), 2)
+
         expense.refresh_from_db()
-        part.refresh_from_db()
-        self.assertEqual(expense.description, "Editable split updated")
-        self.assertEqual(part.amount, Decimal("40.00"))
-        self.assertEqual(part.category_obj, self.utilities)
-        self.assertEqual(expense.get_remainder_amount(), Decimal("60.00"))
+        self.assertEqual(expense.amount, Decimal("-60.00"))
+        self.assertEqual(expense.category_obj, self.general)
+
+        new_expense = Expense.objects.get(category_obj=self.utilities, user=self.user)
+        self.assertEqual(new_expense.amount, Decimal("-40.00"))
 
     def test_split_expenses_update_savings_and_spending_totals(self):
-        Expense.objects.create(
-            user=self.user,
-            date=date(2026, 3, 9),
-            category=self.general.name,
-            category_obj=self.general,
-            amount="-100.00",
-            receiver="Superstore",
-            description="Split savings",
-        )
-        expense = Expense.objects.get(description="Split savings")
-        ExpensePart.objects.create(
-            expense=expense,
-            category_obj=self.savings,
-            amount="20.00",
+        self.client.post(
+            reverse("expense_add"),
+            {
+                "date": "2026-03-09",
+                "description": "Split savings",
+                "amount": "-100.00",
+                "category_obj": str(self.general.pk),
+                "split_rule": "",
+                "receiver": "Superstore",
+                "parts-0-amount": "20.00",
+                "parts-0-category_obj": str(self.savings.pk),
+                **self._formset_management(total_forms=1),
+            },
         )
 
         response = self.client.get(reverse("expense_list"), {"month": "all"})
@@ -819,76 +816,32 @@ class ExpenseSplitTests(TestCase):
         self.assertEqual(response.context["total_spent"], Decimal("-80.00"))
         self.assertEqual(response.context["savings_total"], Decimal("20.00"))
 
-    def test_split_categories_appear_in_search_results(self):
-        expense = Expense.objects.create(
-            user=self.user,
-            date=date(2026, 3, 9),
-            category=self.general.name,
-            category_obj=self.general,
-            amount="-100.00",
-            receiver="Superstore",
-            description="Search split",
-        )
-        ExpensePart.objects.create(
-            expense=expense,
-            category_obj=self.sports,
-            amount="30.00",
-        )
-
-        response = self.client.get(reverse("expense_list"), {"month": "all", "search": "sports"})
-
-        self.assertEqual(
-            [listed_expense.pk for listed_expense in response.context["expenses"]],
-            [expense.pk],
-        )
-        self.assertEqual(
-            [row.category_name for row in response.context["expense_rows"]],
-            ["Sports"],
-        )
-
-    def test_split_expenses_render_as_separate_rows(self):
-        expense = Expense.objects.create(
-            user=self.user,
-            date=date(2026, 3, 9),
-            category=self.general.name,
-            category_obj=self.general,
-            amount="-100.00",
-            receiver="Superstore",
-            description="Rendered split",
-        )
-        ExpensePart.objects.create(
-            expense=expense,
-            category_obj=self.sports,
-            amount="30.00",
-            order=0,
-        )
-        ExpensePart.objects.create(
-            expense=expense,
-            category_obj=self.utilities,
-            amount="20.00",
-            order=1,
+    def test_split_expenses_show_as_independent_rows(self):
+        self.client.post(
+            reverse("expense_add"),
+            {
+                "date": "2026-03-09",
+                "description": "Rendered split",
+                "amount": "-100.00",
+                "category_obj": str(self.general.pk),
+                "split_rule": "",
+                "receiver": "Superstore",
+                "parts-0-amount": "30.00",
+                "parts-0-category_obj": str(self.sports.pk),
+                "parts-1-amount": "20.00",
+                "parts-1-category_obj": str(self.utilities.pk),
+                **self._formset_management(total_forms=2),
+            },
         )
 
         response = self.client.get(reverse("expense_list"), {"month": "all"})
 
         rows = response.context["expense_rows"]
-        self.assertEqual(
-            [
-                (row.category_name, row.amount, row.split_component_label)
-                for row in rows
-            ],
-            [
-                ("Sports", Decimal("-30.00"), "Split part 1"),
-                ("Utilities", Decimal("-20.00"), "Split part 2"),
-                ("General", Decimal("-50.00"), "Remainder"),
-            ],
-        )
-        self.assertTrue(rows[0].show_parent_cells)
-        self.assertFalse(rows[1].show_parent_cells)
-        self.assertFalse(rows[2].show_parent_cells)
-        self.assertEqual(rows[0].group_size, 3)
-        self.assertContains(response, f"Split #{expense.pk}")
-        self.assertContains(response, 'rowspan="3"', html=False)
+        self.assertEqual(len(rows), 3)
+        categories = sorted([row.category_name for row in rows])
+        self.assertEqual(categories, ["General", "Sports", "Utilities"])
+        self.assertNotContains(response, "rowspan")
+        self.assertNotContains(response, "Split #")
 
 
 class CategoryManagementTests(TestCase):
@@ -998,18 +951,21 @@ class ExpenseAnalyticsTests(TestCase):
             name="Sports",
             category_type=Category.CATEGORY_TYPE_EXPENSE,
         )
-        expense = Expense.objects.create(
+        Expense.objects.create(
             user=self.user,
             date=date(2026, 3, 12),
             category=general.name,
             category_obj=general,
-            amount="-100.00",
+            amount="-70.00",
             receiver="Sports shop",
         )
-        ExpensePart.objects.create(
-            expense=expense,
+        Expense.objects.create(
+            user=self.user,
+            date=date(2026, 3, 12),
+            category=sports.name,
             category_obj=sports,
-            amount="30.00",
+            amount="-30.00",
+            receiver="Sports shop",
         )
 
         response = self.client.get(reverse("expenses_per_month"), {"month": "2026-03"})

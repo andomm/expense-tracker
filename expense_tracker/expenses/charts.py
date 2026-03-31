@@ -38,13 +38,6 @@ def _expense_queryset(user):
             "category_obj__parent__parent__parent",
             "category_obj__parent__parent__parent__parent",
         )
-        .prefetch_related(
-            "parts__category_obj",
-            "parts__category_obj__parent",
-            "parts__category_obj__parent__parent",
-            "parts__category_obj__parent__parent__parent",
-            "parts__category_obj__parent__parent__parent__parent",
-        )
         .order_by("date", "pk")
     )
 

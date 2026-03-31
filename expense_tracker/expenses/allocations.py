@@ -1,6 +1,6 @@
 from collections import defaultdict
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal
 from typing import Iterable
 
 from .models import Category, Expense
@@ -10,7 +10,6 @@ NON_EXPENSE_CATEGORY_TYPES = (
     Category.CATEGORY_TYPE_TRANSFER,
     Category.CATEGORY_TYPE_INCOME,
 )
-TWOPLACES = Decimal("0.01")
 
 
 @dataclass(frozen=True)
@@ -20,54 +19,14 @@ class ExpenseAllocation:
     amount: Decimal
 
 
-def _quantize(amount: Decimal) -> Decimal:
-    return amount.quantize(TWOPLACES, rounding=ROUND_HALF_UP)
-
-
 def get_expense_allocations(expense: Expense) -> list[ExpenseAllocation]:
-    user_amount = expense.get_effective_user_amount()
     source_amount = expense.get_source_amount()
-    source_total = abs(source_amount)
 
-    if source_total == 0:
+    if abs(source_amount) == 0:
         return []
 
-    prefetched_parts = getattr(expense, "_prefetched_objects_cache", {}).get("parts")
-    parts = list(prefetched_parts) if prefetched_parts is not None else list(expense.parts.all())
-
-    if not parts:
-        return [ExpenseAllocation(expense=expense, category=expense.category_obj, amount=user_amount)]
-
-    components: list[tuple[Category | None, Decimal]] = [
-        (part.category_obj, part.amount) for part in parts
-    ]
-    remainder = expense.get_remainder_amount()
-    if remainder > 0:
-        components.append((expense.category_obj, remainder))
-
-    if not components:
-        return []
-
-    allocations: list[ExpenseAllocation] = []
-    allocated_total = Decimal("0")
-    sign = Decimal("1") if user_amount >= 0 else Decimal("-1")
-    ratio = abs(user_amount) / source_total
-
-    for index, (category, component_amount) in enumerate(components):
-        if index == len(components) - 1:
-            allocation_amount = user_amount - allocated_total
-        else:
-            allocation_amount = sign * _quantize(component_amount * ratio)
-            allocated_total += allocation_amount
-        allocations.append(
-            ExpenseAllocation(
-                expense=expense,
-                category=category,
-                amount=allocation_amount,
-            )
-        )
-
-    return allocations
+    user_amount = expense.get_effective_user_amount()
+    return [ExpenseAllocation(expense=expense, category=expense.category_obj, amount=user_amount)]
 
 
 def iter_expense_allocations(expenses: Iterable[Expense]):
