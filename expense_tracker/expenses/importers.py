@@ -1,5 +1,6 @@
 import csv
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from io import TextIOWrapper
 from typing import Iterable
@@ -39,7 +40,24 @@ class FinnishBankCSVImporter(BaseExpenseImporter):
         )
 
 
+class SpiirCSVImporter(BaseExpenseImporter):
+    def parse_row(self, row: dict[str, str]) -> ParsedExpenseRow:
+        raw_date = row.get("Date", "").strip('"')
+        date = datetime.strptime(raw_date, "%d-%m-%Y").strftime("%Y-%m-%d")
+        amount = Decimal(row["Amount"].strip('"'))
+
+        return ParsedExpenseRow(
+            date=date,
+            category=row.get("Category", "").strip('"'),
+            description=row.get("Note", "").strip('"'),
+            receiver=row.get("Text", "").strip('"'),
+            amount=amount,
+        )
+
+
 def get_importer(import_format: str) -> BaseExpenseImporter:
     if import_format == "osuuspankki_csv":
         return FinnishBankCSVImporter()
+    if import_format == "spiir_csv":
+        return SpiirCSVImporter()
     raise ValueError(f"Unsupported import format: {import_format}")

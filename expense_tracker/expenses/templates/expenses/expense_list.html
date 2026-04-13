@@ -165,10 +165,46 @@
 						<th class="w-6 px-1">
 							<input type="checkbox" id="select-all-expenses" aria-label="Select all expenses">
 						</th>
-						<th>Date</th>
-						<th>Category</th>
-						<th>Receiver</th>
-						<th>Amount</th>
+						{% with m=active_month_str cf=category_filter_value sq=search_query %}
+						{% with month_p=is_all|yesno:"all,"|default:m %}
+						<th>
+							{% if order_by == "-date" %}
+								<a href="?month={{ month_p }}&order_by=date{% if cf %}&category_filter={{ cf }}{% endif %}{% if sq %}&search={{ sq }}{% endif %}" class="flex items-center gap-1 text-inherit no-underline hover:text-indigo-600">Date ▼</a>
+							{% elif order_by == "date" %}
+								<a href="?month={{ month_p }}&order_by=-date{% if cf %}&category_filter={{ cf }}{% endif %}{% if sq %}&search={{ sq }}{% endif %}" class="flex items-center gap-1 text-inherit no-underline hover:text-indigo-600">Date ▲</a>
+							{% else %}
+								<a href="?month={{ month_p }}&order_by=-date{% if cf %}&category_filter={{ cf }}{% endif %}{% if sq %}&search={{ sq }}{% endif %}" class="flex items-center gap-1 text-inherit no-underline hover:text-indigo-600">Date</a>
+							{% endif %}
+						</th>
+						<th>
+							{% if order_by == "category_obj__name" %}
+								<a href="?month={{ month_p }}&order_by=-category_obj__name{% if cf %}&category_filter={{ cf }}{% endif %}{% if sq %}&search={{ sq }}{% endif %}" class="flex items-center gap-1 text-inherit no-underline hover:text-indigo-600">Category ▲</a>
+							{% elif order_by == "-category_obj__name" %}
+								<a href="?month={{ month_p }}&order_by=category_obj__name{% if cf %}&category_filter={{ cf }}{% endif %}{% if sq %}&search={{ sq }}{% endif %}" class="flex items-center gap-1 text-inherit no-underline hover:text-indigo-600">Category ▼</a>
+							{% else %}
+								<a href="?month={{ month_p }}&order_by=category_obj__name{% if cf %}&category_filter={{ cf }}{% endif %}{% if sq %}&search={{ sq }}{% endif %}" class="flex items-center gap-1 text-inherit no-underline hover:text-indigo-600">Category</a>
+							{% endif %}
+						</th>
+						<th>
+							{% if order_by == "receiver" %}
+								<a href="?month={{ month_p }}&order_by=-receiver{% if cf %}&category_filter={{ cf }}{% endif %}{% if sq %}&search={{ sq }}{% endif %}" class="flex items-center gap-1 text-inherit no-underline hover:text-indigo-600">Receiver ▲</a>
+							{% elif order_by == "-receiver" %}
+								<a href="?month={{ month_p }}&order_by=receiver{% if cf %}&category_filter={{ cf }}{% endif %}{% if sq %}&search={{ sq }}{% endif %}" class="flex items-center gap-1 text-inherit no-underline hover:text-indigo-600">Receiver ▼</a>
+							{% else %}
+								<a href="?month={{ month_p }}&order_by=receiver{% if cf %}&category_filter={{ cf }}{% endif %}{% if sq %}&search={{ sq }}{% endif %}" class="flex items-center gap-1 text-inherit no-underline hover:text-indigo-600">Receiver</a>
+							{% endif %}
+						</th>
+						<th>
+							{% if order_by == "-amount" %}
+								<a href="?month={{ month_p }}&order_by=amount{% if cf %}&category_filter={{ cf }}{% endif %}{% if sq %}&search={{ sq }}{% endif %}" class="flex items-center gap-1 text-inherit no-underline hover:text-indigo-600">Amount ▼</a>
+							{% elif order_by == "amount" %}
+								<a href="?month={{ month_p }}&order_by=-amount{% if cf %}&category_filter={{ cf }}{% endif %}{% if sq %}&search={{ sq }}{% endif %}" class="flex items-center gap-1 text-inherit no-underline hover:text-indigo-600">Amount ▲</a>
+							{% else %}
+								<a href="?month={{ month_p }}&order_by=-amount{% if cf %}&category_filter={{ cf }}{% endif %}{% if sq %}&search={{ sq }}{% endif %}" class="flex items-center gap-1 text-inherit no-underline hover:text-indigo-600">Amount</a>
+							{% endif %}
+						</th>
+						{% endwith %}
+						{% endwith %}
 						<th>Actions</th>
 					</tr>
 				</thead>

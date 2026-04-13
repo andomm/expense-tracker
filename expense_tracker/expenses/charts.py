@@ -131,9 +131,9 @@ def create_cumulative_graph(user):
                 if allocation.category
                 else Category.CATEGORY_TYPE_EXPENSE
             )
-            if allocation.amount >= 0 or category_type in NON_EXPENSE_CATEGORY_TYPES:
+            if category_type in NON_EXPENSE_CATEGORY_TYPES:
                 continue
-            daily_totals[expense.date] += abs(allocation.amount)
+            daily_totals[expense.date] += allocation.amount
 
     dates = []
     daily_amounts = []
@@ -142,10 +142,9 @@ def create_cumulative_graph(user):
 
     for day, total_spent in sorted(daily_totals.items()):
         dates.append(day.strftime("%Y-%m-%d"))
-        daily_amount = abs(total_spent)
-        daily_amounts.append(daily_amount)
-        cumulative_sum += daily_amount
-        cumulative_amounts.append(cumulative_sum)
+        cumulative_sum += float(total_spent)
+        daily_amounts.append(float(abs(total_spent)))
+        cumulative_amounts.append(abs(cumulative_sum))
 
     if not dates:
         return _render_chart(_empty_figure("No spending data yet for this chart."))
@@ -248,7 +247,7 @@ def create_category_breakdown(
                 if allocation.category
                 else Category.CATEGORY_TYPE_EXPENSE
             )
-            if allocation.amount >= 0 or category_type in NON_EXPENSE_CATEGORY_TYPES:
+            if category_type in NON_EXPENSE_CATEGORY_TYPES:
                 continue
 
             if allocation.category:
@@ -256,15 +255,15 @@ def create_category_breakdown(
                 category_name = root.name
             else:
                 category_name = "Uncategorized"
-            category_totals[category_name] += abs(allocation.amount)
+            category_totals[category_name] += allocation.amount
 
     sorted_totals = sorted(
         category_totals.items(),
-        key=lambda item: item[1],
+        key=lambda item: abs(item[1]),
         reverse=True,
     )
     categories = [name for name, _ in sorted_totals]
-    amounts = [amount for _, amount in sorted_totals]
+    amounts = [float(abs(amount)) for _, amount in sorted_totals]
 
     if not categories:
         return _render_chart(_empty_figure("No category data for the selected month."))
@@ -328,8 +327,8 @@ def create_income_vs_expenses(user):
             )
             if category_type == Category.CATEGORY_TYPE_INCOME:
                 daily_income[expense.date] += allocation.amount
-            elif allocation.amount < 0 and category_type not in NON_EXPENSE_CATEGORY_TYPES:
-                daily_expenses[expense.date] += abs(allocation.amount)
+            elif category_type not in NON_EXPENSE_CATEGORY_TYPES:
+                daily_expenses[expense.date] += allocation.amount
 
     all_dates = sorted(set(daily_expenses) | set(daily_income))
 
@@ -344,12 +343,12 @@ def create_income_vs_expenses(user):
         date_str = day.strftime("%Y-%m-%d")
         dates.append(date_str)
 
-        expenses_cumsum += daily_expenses[day]
-        income_cumsum += daily_income[day]
+        expenses_cumsum += float(daily_expenses[day])
+        income_cumsum += float(daily_income[day])
 
-        expenses_list.append(expenses_cumsum)
+        expenses_list.append(abs(expenses_cumsum))
         income_list.append(income_cumsum)
-        balance_list.append(income_cumsum - expenses_cumsum)
+        balance_list.append(income_cumsum + expenses_cumsum)
 
     if not dates:
         return _render_chart(_empty_figure("No income or spending data yet."))

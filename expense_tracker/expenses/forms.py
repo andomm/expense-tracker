@@ -99,6 +99,10 @@ class SortForm(forms.Form):
         ("date", "Date — oldest first"),
         ("-amount", "Amount — highest first"),
         ("amount", "Amount — lowest first"),
+        ("-category_obj__name", "Category — Z to A"),
+        ("category_obj__name", "Category — A to Z"),
+        ("-receiver", "Receiver — Z to A"),
+        ("receiver", "Receiver — A to Z"),
     ]
     order_by = forms.ChoiceField(
         choices=ORDER_CHOICES,
@@ -166,6 +170,10 @@ class ExpenseForm(forms.ModelForm):
             self.fields["split_rule"].queryset = ExpenseSplitRule.objects.filter(
                 user=user
             )
+        # category_obj is not in Meta.fields so Django won't populate it from the
+        # instance automatically — set it explicitly when editing an existing expense.
+        if self.instance and self.instance.pk and self.instance.category_obj_id:
+            self.initial["category_obj"] = self.instance.category_obj_id
 
     def save(self, commit=True):
         expense = super().save(commit=False)
@@ -324,8 +332,10 @@ class CategoryForm(forms.ModelForm):
 
 class CSVUploadForm(forms.Form):
     IMPORT_FORMAT_FINNISH_BANK = "osuuspankki_csv"
+    IMPORT_FORMAT_SPIIR = "spiir_csv"
     IMPORT_FORMAT_CHOICES = [
         (IMPORT_FORMAT_FINNISH_BANK, "OP"),
+        (IMPORT_FORMAT_SPIIR, "Spiir"),
     ]
 
     file = forms.FileField(label="Select a CSV file")

@@ -72,8 +72,7 @@ def summarize_allocations(
             continue
 
         if (
-            allocation.amount < 0
-            and category_type not in NON_EXPENSE_CATEGORY_TYPES
+            category_type not in NON_EXPENSE_CATEGORY_TYPES
         ):
             totals["total_spent"] += allocation.amount
 
@@ -94,12 +93,12 @@ def build_monthly_spending_summary(expenses: Iterable[Expense]) -> list[dict]:
             if allocation.category
             else Category.CATEGORY_TYPE_EXPENSE
         )
-        if allocation.amount >= 0 or category_type in NON_EXPENSE_CATEGORY_TYPES:
+        if category_type in NON_EXPENSE_CATEGORY_TYPES:
             continue
         month = allocation.expense.date.replace(day=1)
-        monthly_totals[month] += abs(allocation.amount)
+        monthly_totals[month] += allocation.amount
 
     return [
-        {"month": month, "total_spent": total}
+        {"month": month, "total_spent": abs(total)}
         for month, total in sorted(monthly_totals.items())
     ]

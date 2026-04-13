@@ -679,6 +679,7 @@ def upload_csv(request):
                 match = categorize_from_sources(
                     ("receiver", parsed.receiver),
                     ("description", parsed.description),
+                    ("category", parsed.category),
                     user=request.user,
                 )
 
@@ -809,6 +810,7 @@ def sync_uncategorized_expenses(user):
         match = categorize_from_sources(
             ("receiver", expense.receiver),
             ("description", expense.description),
+            ("category", expense.category),
             user=user,
         )
 
@@ -879,6 +881,7 @@ def upgrade_categorized_expenses(user):
         match = categorize_from_sources(
             ("receiver", expense.receiver),
             ("description", expense.description),
+            ("category", expense.category),
             user=user,
         )
 
