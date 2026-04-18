@@ -294,7 +294,7 @@ def create_category_breakdown(
 
     fig.update_layout(
         _chart_layout(
-            hovermode=False,
+            hovermode="closest",
             margin=dict(l=10, r=10, t=10, b=24),
             legend=dict(
                 orientation="h",
