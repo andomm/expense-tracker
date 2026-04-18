@@ -975,6 +975,179 @@ class CategoryManagementTests(TestCase):
         self.assertNotContains(response, "System Categories")
 
 
+class CategoryDuplicateKeywordTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="kw-test-user", password="pass")
+        self.client.force_login(self.user)
+        # Clear any seeded categories to avoid keyword collisions with defaults
+        Category.objects.filter(user=self.user).delete()
+
+        self.food_cat = Category.objects.create(
+            user=self.user,
+            name="Food",
+            category_type=Category.CATEGORY_TYPE_EXPENSE,
+            keywords="lidl,prisma",
+        )
+
+    def test_unique_keywords_succeed(self):
+        """Creating a category with keywords not used elsewhere should succeed."""
+        response = self.client.post(
+            reverse("category_add"),
+            {
+                "name": "Transport",
+                "parent": "",
+                "category_type": Category.CATEGORY_TYPE_EXPENSE,
+                "keywords": "uber,taxi",
+            },
+            follow=True,
+        )
+        self.assertRedirects(response, reverse("category_list"))
+        self.assertTrue(Category.objects.filter(user=self.user, name="Transport").exists())
+
+    def test_duplicate_keyword_blocked(self):
+        """Creating a category with a keyword already on another category should fail."""
+        response = self.client.post(
+            reverse("category_add"),
+            {
+                "name": "Supermarkets",
+                "parent": "",
+                "category_type": Category.CATEGORY_TYPE_EXPENSE,
+                "keywords": "lidl,k-market",
+            },
+        )
+        self.assertEqual(response.status_code, 200)  # Re-renders form, not redirect
+        form = response.context["form"]
+        self.assertTrue(form.errors.get("keywords"))
+        self.assertIn("lidl", form.errors["keywords"][0])
+        self.assertIn("Food", form.errors["keywords"][0])
+
+    def test_editing_own_keywords_allowed(self):
+        """Editing a category and keeping its existing keywords should succeed."""
+        response = self.client.post(
+            reverse("category_edit", args=[self.food_cat.pk]),
+            {
+                "name": "Food",
+                "parent": "",
+                "category_type": Category.CATEGORY_TYPE_EXPENSE,
+                "keywords": "lidl,prisma,k-market",
+            },
+            follow=True,
+        )
+        self.assertRedirects(response, reverse("category_list"))
+        self.food_cat.refresh_from_db()
+        self.assertEqual(self.food_cat.keywords, "lidl,prisma,k-market")
+
+    def test_descendant_keyword_conflict_detected(self):
+        """A keyword on a subcategory of another category should trigger a conflict."""
+        sub_cat = Category.objects.create(
+            user=self.user,
+            name="Hypermarkets",
+            parent=self.food_cat,
+            category_type=Category.CATEGORY_TYPE_EXPENSE,
+            keywords="citymarket",
+        )
+
+        response = self.client.post(
+            reverse("category_add"),
+            {
+                "name": "Shopping",
+                "parent": "",
+                "category_type": Category.CATEGORY_TYPE_EXPENSE,
+                "keywords": "citymarket",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertTrue(form.errors.get("keywords"))
+        self.assertIn("citymarket", form.errors["keywords"][0])
+        self.assertIn("Hypermarkets", form.errors["keywords"][0])
+
+    def test_case_insensitive_conflict(self):
+        """Keyword matching should be case-insensitive."""
+        response = self.client.post(
+            reverse("category_add"),
+            {
+                "name": "Markets",
+                "parent": "",
+                "category_type": Category.CATEGORY_TYPE_EXPENSE,
+                "keywords": "LIDL",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertTrue(form.errors.get("keywords"))
+
+    def test_multiple_conflicts_reported(self):
+        """Multiple conflicting keywords should all appear in the error message."""
+        Category.objects.create(
+            user=self.user,
+            name="Fuel",
+            category_type=Category.CATEGORY_TYPE_EXPENSE,
+            keywords="neste,abc",
+        )
+
+        response = self.client.post(
+            reverse("category_add"),
+            {
+                "name": "Everything",
+                "parent": "",
+                "category_type": Category.CATEGORY_TYPE_EXPENSE,
+                "keywords": "lidl,neste",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertTrue(form.errors.get("keywords"))
+        error_text = form.errors["keywords"][0]
+        self.assertIn("lidl", error_text)
+        self.assertIn("neste", error_text)
+
+    def test_no_conflict_with_other_users_keywords(self):
+        """Keywords from other users should not cause conflicts."""
+        other_user = User.objects.create_user(username="other-user", password="pass")
+        Category.objects.create(
+            user=other_user,
+            name="Other Food",
+            category_type=Category.CATEGORY_TYPE_EXPENSE,
+            keywords="uber",
+        )
+
+        response = self.client.post(
+            reverse("category_add"),
+            {
+                "name": "Transport",
+                "parent": "",
+                "category_type": Category.CATEGORY_TYPE_EXPENSE,
+                "keywords": "uber",
+            },
+            follow=True,
+        )
+        self.assertRedirects(response, reverse("category_list"))
+
+    def test_editing_category_with_stolen_keyword_blocked(self):
+        """Editing a category to add a keyword from another category should fail."""
+        transport = Category.objects.create(
+            user=self.user,
+            name="Transport",
+            category_type=Category.CATEGORY_TYPE_EXPENSE,
+            keywords="uber,taxi",
+        )
+
+        response = self.client.post(
+            reverse("category_edit", args=[transport.pk]),
+            {
+                "name": "Transport",
+                "parent": "",
+                "category_type": Category.CATEGORY_TYPE_EXPENSE,
+                "keywords": "uber,taxi,lidl",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        form = response.context["form"]
+        self.assertTrue(form.errors.get("keywords"))
+        self.assertIn("lidl", form.errors["keywords"][0])
+
+
 class ExpenseAnalyticsTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="analyticsuser", password="pass")
