@@ -17,6 +17,7 @@ from .importers import get_importer
 from .allocations import (
     ExpenseAllocation,
     build_monthly_spending_summary,
+    build_yearly_spending_summary,
     expense_matches_category_ids,
     get_expense_allocations,
     is_uncategorized_expense,
@@ -93,7 +94,7 @@ def expenses_per_month(request):
     )
     active_month_label = active_month_date.strftime("%B %Y")
 
-    monthly_totals = build_monthly_spending_summary(
+    yearly_totals = build_yearly_spending_summary(
         Expense.objects.filter(user=request.user)
         .select_related(
             "category_obj",
@@ -116,7 +117,7 @@ def expenses_per_month(request):
         request,
         "expenses/expenses_per_month.html",
         {
-            "expenses_per_month": monthly_totals,
+            "yearly_summary": yearly_totals,
             "cumulative_graph": cumulative_graph,
             "monthly_comparison": monthly_comparison,
             "category_breakdown": category_breakdown,
@@ -641,6 +642,20 @@ def expense_bulk_category_update(request):
         request,
         f"Updated {updated_count} expense{'s' if updated_count != 1 else ''} to {category.name}.",
     )
+    return redirect(redirect_url)
+
+
+@login_required
+def expense_bulk_delete(request):
+    if request.method != "POST":
+        return redirect("expense_list")
+
+    redirect_url = _build_expense_list_url(request.POST)
+    expense_ids = request.POST.getlist("expense_ids")
+
+    if expense_ids:
+        Expense.objects.filter(user=request.user, pk__in=expense_ids).delete()
+
     return redirect(redirect_url)
 
 

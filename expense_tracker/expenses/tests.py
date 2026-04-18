@@ -497,6 +497,88 @@ class BulkCategoryUpdateTests(TestCase):
         self.assertContains(response, "Select at least one expense to update.")
 
 
+class BulkDeleteTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="bulkdeluser", password="testpass123")
+        self.client.login(username="bulkdeluser", password="testpass123")
+        self.other_user = User.objects.create_user(
+            username="otherdeluser", password="testpass123"
+        )
+
+        self.expense_one = Expense.objects.create(
+            user=self.user,
+            date="2026-03-15",
+            description="Groceries",
+            amount="-50.00",
+            receiver="Store A",
+        )
+        self.expense_two = Expense.objects.create(
+            user=self.user,
+            date="2026-03-16",
+            description="Coffee",
+            amount="-5.00",
+            receiver="Cafe B",
+        )
+        self.other_user_expense = Expense.objects.create(
+            user=self.other_user,
+            date="2026-03-15",
+            description="Other",
+            amount="-30.00",
+            receiver="Other store",
+        )
+
+    def test_deletes_selected_expenses_and_redirects(self):
+        response = self.client.post(
+            reverse("expense_bulk_delete"),
+            {
+                "expense_ids": [str(self.expense_one.pk), str(self.expense_two.pk)],
+                "month": "2026-03",
+                "order_by": "amount",
+            },
+        )
+        expected_url = f"{reverse('expense_list')}?month=2026-03&order_by=amount"
+        self.assertRedirects(response, expected_url, fetch_redirect_response=False)
+        self.assertFalse(Expense.objects.filter(pk=self.expense_one.pk).exists())
+        self.assertFalse(Expense.objects.filter(pk=self.expense_two.pk).exists())
+
+    def test_does_not_delete_other_users_expenses(self):
+        response = self.client.post(
+            reverse("expense_bulk_delete"),
+            {
+                "expense_ids": [
+                    str(self.expense_one.pk),
+                    str(self.other_user_expense.pk),
+                ],
+                "month": "all",
+            },
+        )
+        self.assertRedirects(
+            response,
+            f"{reverse('expense_list')}?month=all",
+            fetch_redirect_response=False,
+        )
+        self.assertFalse(Expense.objects.filter(pk=self.expense_one.pk).exists())
+        self.assertTrue(Expense.objects.filter(pk=self.other_user_expense.pk).exists())
+
+    def test_redirects_on_get(self):
+        response = self.client.get(reverse("expense_bulk_delete"))
+        self.assertRedirects(
+            response, reverse("expense_list"), fetch_redirect_response=False
+        )
+
+    def test_handles_empty_selection(self):
+        response = self.client.post(
+            reverse("expense_bulk_delete"),
+            {"month": "all"},
+        )
+        self.assertRedirects(
+            response,
+            f"{reverse('expense_list')}?month=all",
+            fetch_redirect_response=False,
+        )
+        self.assertTrue(Expense.objects.filter(pk=self.expense_one.pk).exists())
+
+
 class ExpenseListSummaryTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="summaryuser", password="pass")
@@ -937,8 +1019,8 @@ class ExpenseAnalyticsTests(TestCase):
         self.assertContains(response, "March Pie Category")
         self.assertNotContains(response, "February Pie Category")
 
-        months = [item["month"].strftime("%Y-%m") for item in response.context["expenses_per_month"]]
-        self.assertEqual(months, ["2026-02", "2026-03"])
+        years = [item["year"] for item in response.context["yearly_summary"]]
+        self.assertEqual(years, [2026])
 
     def test_split_expenses_contribute_to_monthly_analytics(self):
         general = Category.objects.create(
@@ -974,7 +1056,7 @@ class ExpenseAnalyticsTests(TestCase):
         self.assertContains(response, "Sports")
         self.assertContains(response, "General")
         march_summary = next(
-            item for item in response.context["expenses_per_month"]
-            if item["month"].strftime("%Y-%m") == "2026-03"
+            item for item in response.context["yearly_summary"]
+            if item["year"] == 2026
         )
         self.assertEqual(march_summary["total_spent"], Decimal("100.00"))

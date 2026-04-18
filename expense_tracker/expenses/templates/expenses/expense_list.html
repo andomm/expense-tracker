@@ -123,43 +123,8 @@
 	</div>
 	{% endwith %}
 
-	<form method="post" action="{% url 'expense_bulk_category_update' %}" class="space-y-4">
-		{% csrf_token %}
-		<input type="hidden" name="month" value="{% if is_all %}all{% else %}{{ active_month_str }}{% endif %}">
-		{% if order_by %}
-			<input type="hidden" name="order_by" value="{{ order_by }}">
-		{% endif %}
-		{% if category_filter_value %}
-			<input type="hidden" name="category_filter" value="{{ category_filter_value }}">
-		{% endif %}
-		{% if search_query %}
-			<input type="hidden" name="search" value="{{ search_query }}">
-		{% endif %}
-
-		<div class="rounded-xl border border-slate-200 bg-white p-4">
-			<div class="flex flex-wrap items-end justify-between gap-3">
-				<div>
-					<h3 class="mb-1">Bulk category update</h3>
-					<p class="text-sm text-slate-600">Select multiple expenses from the table and apply one category to all of them.</p>
-				</div>
-				<div class="flex flex-wrap items-end gap-2">
-					<div class="flex flex-col gap-1">
-						<label for="{{ bulk_category_form.category_obj.id_for_label }}" class="text-xs font-medium text-slate-500">Change selected to</label>
-						{{ bulk_category_form.category_obj }}
-					</div>
-					<button
-						type="submit"
-						id="bulk-category-submit"
-						class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						Apply
-					</button>
-				</div>
-			</div>
-		</div>
-
-		<div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
-			<table class="expenses-table">
+	<div class="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+		<table class="expenses-table">
 				<thead>
 					<tr>
 						<th class="w-6 px-1">
@@ -205,7 +170,7 @@
 						</th>
 						{% endwith %}
 						{% endwith %}
-						<th>Actions</th>
+						<th class="w-10"></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -244,9 +209,12 @@
 								{% endif %}
 								</a>
 							</td>
-							<td class="expense-actions space-x-2">
-								<a href="{% url 'expense_edit' row.expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="font-medium text-indigo-600 hover:text-indigo-800">Edit</a>
-								<a href="{% url 'expense_delete' row.expense.pk %}" class="font-medium text-red-600 hover:text-red-800">Delete</a>
+							<td class="relative px-1 py-2 text-center">
+								<button type="button" class="kebab-btn rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" data-expense-id="{{ row.expense.pk }}" aria-label="Actions">⋮</button>
+								<div class="kebab-menu hidden absolute right-0 z-20 mt-1 w-40 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+									<button type="button" class="kebab-action-category block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-50">Change Category</button>
+									<button type="button" class="kebab-action-delete block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50">Delete</button>
+								</div>
 							</td>
 						</tr>
 					{% empty %}
@@ -256,48 +224,134 @@
 					{% endfor %}
 				</tbody>
 			</table>
-		</div>
-	</form>
+	</div>
+
+	<dialog id="category-modal" class="rounded-xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-black/40">
+		<form method="post" action="{% url 'expense_bulk_category_update' %}" class="w-80 p-6">
+			{% csrf_token %}
+			<input type="hidden" name="month" value="{% if is_all %}all{% else %}{{ active_month_str }}{% endif %}">
+			{% if order_by %}<input type="hidden" name="order_by" value="{{ order_by }}">{% endif %}
+			{% if category_filter_value %}<input type="hidden" name="category_filter" value="{{ category_filter_value }}">{% endif %}
+			{% if search_query %}<input type="hidden" name="search" value="{{ search_query }}">{% endif %}
+			<div id="category-modal-ids"></div>
+			<h3 class="mb-1 text-lg font-semibold text-slate-900">Change Category</h3>
+			<p class="mb-4 text-sm text-slate-500" id="category-modal-count">Update 0 expense(s)</p>
+			<div class="mb-4 flex flex-col gap-1">
+				<label for="{{ bulk_category_form.category_obj.id_for_label }}" class="text-xs font-medium text-slate-500">Category</label>
+				{{ bulk_category_form.category_obj }}
+			</div>
+			<div class="flex justify-end gap-2">
+				<button type="button" onclick="this.closest('dialog').close()" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+				<button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500">Apply</button>
+			</div>
+		</form>
+	</dialog>
+
+	<dialog id="delete-modal" class="rounded-xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-black/40">
+		<form method="post" action="{% url 'expense_bulk_delete' %}" class="w-80 p-6">
+			{% csrf_token %}
+			<input type="hidden" name="month" value="{% if is_all %}all{% else %}{{ active_month_str }}{% endif %}">
+			{% if order_by %}<input type="hidden" name="order_by" value="{{ order_by }}">{% endif %}
+			{% if category_filter_value %}<input type="hidden" name="category_filter" value="{{ category_filter_value }}">{% endif %}
+			{% if search_query %}<input type="hidden" name="search" value="{{ search_query }}">{% endif %}
+			<div id="delete-modal-ids"></div>
+			<h3 class="mb-1 text-lg font-semibold text-slate-900">Delete Expenses</h3>
+			<p class="mb-4 text-sm text-slate-500" id="delete-modal-count">Delete 0 expense(s)? This cannot be undone.</p>
+			<div class="flex justify-end gap-2">
+				<button type="button" onclick="this.closest('dialog').close()" class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">Cancel</button>
+				<button type="submit" class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500">Delete</button>
+			</div>
+		</form>
+	</dialog>
 
 <script>
 	document.addEventListener('DOMContentLoaded', function () {
 		['id_order_by', 'id_category_filter'].forEach(function (id) {
-			const select = document.getElementById(id);
+			var select = document.getElementById(id);
 			if (select) select.addEventListener('change', function () { this.form.submit(); });
 		});
 
-		const selectAll = document.getElementById('select-all-expenses');
-		const rowCheckboxes = Array.from(document.querySelectorAll('.expense-row-checkbox'));
-		const bulkSubmitButton = document.getElementById('bulk-category-submit');
-		const updateBulkActions = function () {
-			const checkedCount = rowCheckboxes.filter(function (checkbox) {
-				return checkbox.checked;
-			}).length;
+		var selectAll = document.getElementById('select-all-expenses');
+		var rowCheckboxes = Array.from(document.querySelectorAll('.expense-row-checkbox'));
 
-			if (bulkSubmitButton) {
-				bulkSubmitButton.disabled = checkedCount === 0;
-			}
-
-			if (selectAll) {
-				selectAll.checked = rowCheckboxes.length > 0 && checkedCount === rowCheckboxes.length;
-				selectAll.indeterminate = checkedCount > 0 && checkedCount < rowCheckboxes.length;
-			}
-		};
+		function updateSelectAllState() {
+			if (!selectAll) return;
+			var checkedCount = rowCheckboxes.filter(function (cb) { return cb.checked; }).length;
+			selectAll.checked = rowCheckboxes.length > 0 && checkedCount === rowCheckboxes.length;
+			selectAll.indeterminate = checkedCount > 0 && checkedCount < rowCheckboxes.length;
+		}
 
 		if (selectAll) {
 			selectAll.addEventListener('change', function () {
-				rowCheckboxes.forEach(function (checkbox) {
-					checkbox.checked = selectAll.checked;
-				});
-				updateBulkActions();
+				rowCheckboxes.forEach(function (cb) { cb.checked = selectAll.checked; });
+				updateSelectAllState();
 			});
 		}
+		rowCheckboxes.forEach(function (cb) {
+			cb.addEventListener('change', updateSelectAllState);
+		});
+		updateSelectAllState();
 
-		rowCheckboxes.forEach(function (checkbox) {
-			checkbox.addEventListener('change', updateBulkActions);
+		// Kebab dropdown
+		function closeAllMenus() {
+			document.querySelectorAll('.kebab-menu').forEach(function (m) { m.classList.add('hidden'); });
+		}
+
+		document.querySelectorAll('.kebab-btn').forEach(function (btn) {
+			btn.addEventListener('click', function (e) {
+				e.stopPropagation();
+				var menu = btn.nextElementSibling;
+				var isOpen = !menu.classList.contains('hidden');
+				closeAllMenus();
+				if (!isOpen) {
+					var anyChecked = rowCheckboxes.some(function (cb) { return cb.checked; });
+					if (!anyChecked) {
+						var cb = btn.closest('tr').querySelector('.expense-row-checkbox');
+						if (cb) { cb.checked = true; updateSelectAllState(); }
+					}
+					menu.classList.remove('hidden');
+				}
+			});
 		});
 
-		updateBulkActions();
+		document.addEventListener('click', closeAllMenus);
+		document.addEventListener('keydown', function (e) {
+			if (e.key === 'Escape') closeAllMenus();
+		});
+
+		function getSelectedIds() {
+			return rowCheckboxes.filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
+		}
+
+		function openModal(dialogId, idsContainerId, countId, countPrefix) {
+			var ids = getSelectedIds();
+			if (ids.length === 0) return;
+
+			var container = document.getElementById(idsContainerId);
+			container.innerHTML = '';
+			ids.forEach(function (id) {
+				var input = document.createElement('input');
+				input.type = 'hidden';
+				input.name = 'expense_ids';
+				input.value = id;
+				container.appendChild(input);
+			});
+
+			var noun = ids.length === 1 ? 'expense' : 'expenses';
+			document.getElementById(countId).textContent =
+				countPrefix + ids.length + ' ' + noun + (dialogId === 'delete-modal' ? '? This cannot be undone.' : '');
+
+			document.getElementById(dialogId).showModal();
+			closeAllMenus();
+		}
+
+		document.addEventListener('click', function (e) {
+			if (e.target.classList.contains('kebab-action-category')) {
+				openModal('category-modal', 'category-modal-ids', 'category-modal-count', 'Update ');
+			} else if (e.target.classList.contains('kebab-action-delete')) {
+				openModal('delete-modal', 'delete-modal-ids', 'delete-modal-count', 'Delete ');
+			}
+		});
 	});
 </script>
 {% endblock %}

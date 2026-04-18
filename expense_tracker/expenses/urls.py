@@ -9,6 +9,7 @@ urlpatterns = [
         views.expense_bulk_category_update,
         name="expense_bulk_category_update",
     ),
+    path("bulk-delete/", views.expense_bulk_delete, name="expense_bulk_delete"),
     path("<int:pk>/edit/", views.expense_edit, name="expense_edit"),
     path("<int:pk>/delete/", views.expense_delete, name="expense_delete"),
     path("delete/", views.expense_delete_all, name="expense_delete_all"),
