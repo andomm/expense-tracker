@@ -329,6 +329,57 @@ class CategoryForm(forms.ModelForm):
             )
         return parent
 
+    def clean_keywords(self):
+        keywords_raw = self.cleaned_data.get("keywords", "")
+        if not keywords_raw or not keywords_raw.strip():
+            return keywords_raw
+
+        submitted_keywords = [
+            kw.strip().lower() for kw in keywords_raw.split(",") if kw.strip()
+        ]
+
+        if not submitted_keywords:
+            return keywords_raw
+
+        user = self.instance.user if self.instance else None
+        if not user:
+            return keywords_raw
+
+        # Get all categories for this user, excluding self and own descendants
+        exclude_ids = set()
+        if self.instance.pk:
+            exclude_ids.add(self.instance.pk)
+            exclude_ids.update(self.instance.get_all_descendant_ids())
+
+        other_categories = Category.objects.filter(user=user).exclude(
+            pk__in=exclude_ids
+        ).select_related(
+            "parent",
+            "parent__parent",
+            "parent__parent__parent",
+            "parent__parent__parent__parent",
+        )
+
+        # Build keyword → category name mapping from all other categories
+        keyword_to_category: dict[str, str] = {}
+        for cat in other_categories:
+            for kw in cat.get_keywords_list():
+                if kw not in keyword_to_category:
+                    keyword_to_category[kw] = cat.name
+
+        # Check for conflicts
+        conflicts = []
+        for kw in submitted_keywords:
+            if kw in keyword_to_category:
+                conflicts.append(
+                    f"Keyword '{kw}' is already used by category '{keyword_to_category[kw]}'."
+                )
+
+        if conflicts:
+            raise forms.ValidationError(" ".join(conflicts))
+
+        return keywords_raw
+
 
 class CSVUploadForm(forms.Form):
     IMPORT_FORMAT_FINNISH_BANK = "osuuspankki_csv"
