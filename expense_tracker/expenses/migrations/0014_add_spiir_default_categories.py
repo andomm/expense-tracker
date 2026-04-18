@@ -177,9 +177,25 @@ def create_spiir_categories(apps, schema_editor):
 
 
 def reverse_spiir_categories(apps, schema_editor):
-    """Remove Spiir categories created by this migration."""
+    """Remove Spiir categories created by this migration.
+
+    The forward function is a noop when system categories already exist (seeded
+    by migration 0008).  We detect that case by looking for the "Savings"
+    category which is unique to 0008 (the Spiir list uses different names).
+
+    When the forward DID create categories, we use raw SQL to delete them so
+    that Django's cascade collector does not try to query tables (e.g.
+    expenses_expensepart) that may not exist when reversing through earlier
+    migrations.
+    """
     Category = apps.get_model('expenses', 'Category')
-    Category.objects.filter(is_system=True, user__isnull=True).delete()
+    if Category.objects.filter(
+        is_system=True, user__isnull=True, name="Savings"
+    ).exists():
+        return
+    schema_editor.execute(
+        "DELETE FROM expenses_category WHERE is_system AND user_id IS NULL"
+    )
 
 
 class Migration(migrations.Migration):
