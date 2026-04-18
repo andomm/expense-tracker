@@ -200,6 +200,19 @@ body {
     color: #b91c1c;
 }
 
+/* Django form validation errors */
+.errorlist {
+    list-style: none;
+    padding: 0;
+    margin: 0.25rem 0 0;
+    color: #dc2626;
+    font-size: 0.875rem;
+}
+
+.errorlist li {
+    margin-bottom: 0.125rem;
+}
+
 .flash-warning {
     border-color: #fde68a;
     background: #fffbeb;
@@ -250,9 +263,9 @@ form p {
     margin-bottom: 1rem;
 }
 
-input,
-select,
-textarea {
+form input,
+form select,
+form textarea {
     width: 100%;
     border-radius: 0.6rem;
     border: 1px solid #d1d5db;
@@ -263,9 +276,18 @@ textarea {
     transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
-input:focus,
-select:focus,
-textarea:focus {
+form select {
+    padding: 0.62rem 0.75rem;
+    cursor: pointer;
+}
+
+form select option {
+    padding: 0.5rem 0.75rem;
+}
+
+form input:focus,
+form select:focus,
+form textarea:focus {
     border-color: #6366f1;
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
@@ -475,10 +497,15 @@ tr:hover td {
     color: #cbd5e1;
 }
 
-:root.dark-mode input,
-:root.dark-mode select,
-:root.dark-mode textarea {
+:root.dark-mode form input,
+:root.dark-mode form select,
+:root.dark-mode form textarea {
     border-color: #334155;
+    background: #0f172a;
+    color: #f1f5f9;
+}
+
+:root.dark-mode form select option {
     background: #0f172a;
     color: #f1f5f9;
 }
