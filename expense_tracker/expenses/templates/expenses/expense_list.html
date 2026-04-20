@@ -58,12 +58,9 @@
 			{% else %}
 				<input type="hidden" name="month" value="all">
 			{% endif %}
+			<input type="hidden" name="order_by" value="{{ order_by }}">
 
 			<div class="flex flex-wrap items-end gap-4">
-				<div class="flex flex-col gap-1">
-					<label for="id_order_by" class="text-xs font-medium text-slate-500">Sort by</label>
-					{{ form.order_by }}
-				</div>
 				<div class="flex flex-col gap-1">
 					<label for="id_category_filter" class="text-xs font-medium text-slate-500">Category</label>
 					{{ form.category_filter }}
@@ -82,9 +79,25 @@
 				   class="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
 					‹ Prev
 				</a>
-				<span class="text-sm font-semibold text-slate-800">
-					{% if is_all %}All time{% else %}{{ active_month_label }}{% endif %}
-				</span>
+				<select id="picker-month" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300">
+					<option value="1" {% if active_month_num == 1 %}selected{% endif %}>January</option>
+					<option value="2" {% if active_month_num == 2 %}selected{% endif %}>February</option>
+					<option value="3" {% if active_month_num == 3 %}selected{% endif %}>March</option>
+					<option value="4" {% if active_month_num == 4 %}selected{% endif %}>April</option>
+					<option value="5" {% if active_month_num == 5 %}selected{% endif %}>May</option>
+					<option value="6" {% if active_month_num == 6 %}selected{% endif %}>June</option>
+					<option value="7" {% if active_month_num == 7 %}selected{% endif %}>July</option>
+					<option value="8" {% if active_month_num == 8 %}selected{% endif %}>August</option>
+					<option value="9" {% if active_month_num == 9 %}selected{% endif %}>September</option>
+					<option value="10" {% if active_month_num == 10 %}selected{% endif %}>October</option>
+					<option value="11" {% if active_month_num == 11 %}selected{% endif %}>November</option>
+					<option value="12" {% if active_month_num == 12 %}selected{% endif %}>December</option>
+				</select>
+				<select id="picker-year" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300">
+					{% for yr in picker_years %}
+						<option value="{{ yr }}" {% if yr == active_year %}selected{% endif %}>{{ yr }}</option>
+					{% endfor %}
+				</select>
 				{% if not is_current_month and not is_all %}
 					<a href="?month={{ next_month_str }}{% if order_param %}&order_by={{ order_param }}{% endif %}{% if cat_param %}&category_filter={{ cat_param }}{% endif %}{% if search_param %}&search={{ search_param }}{% endif %}"
 					   class="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
@@ -266,6 +279,27 @@
 
 <script>
 	document.addEventListener('DOMContentLoaded', function () {
+		var monthPicker = document.getElementById('month-picker');
+		if (monthPicker) {
+			monthPicker.addEventListener('change', function () {
+				var params = new URLSearchParams(window.location.search);
+				params.set('month', this.value);
+				window.location.search = params.toString();
+			});
+		}
+
+		var pickerMonth = document.getElementById('picker-month');
+		var pickerYear = document.getElementById('picker-year');
+		function navigateToPickedMonth() {
+			var m = pickerMonth.value.padStart(2, '0');
+			var y = pickerYear.value;
+			var params = new URLSearchParams(window.location.search);
+			params.set('month', y + '-' + m);
+			window.location.search = params.toString();
+		}
+		if (pickerMonth) pickerMonth.addEventListener('change', navigateToPickedMonth);
+		if (pickerYear) pickerYear.addEventListener('change', navigateToPickedMonth);
+
 		['id_order_by', 'id_category_filter'].forEach(function (id) {
 			var select = document.getElementById(id);
 			if (select) select.addEventListener('change', function () { this.form.submit(); });
