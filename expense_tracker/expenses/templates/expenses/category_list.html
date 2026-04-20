@@ -86,7 +86,7 @@
               </tr>
               {# Child rows #}
               {% for child in group.children %}
-                <tr class="bg-slate-50/60" x-show="open" x-transition.opacity>
+                <tr class="border-l-2 border-indigo-300" x-show="open" x-transition.opacity>
                   <td style="padding-left: {{ child.depth }}rem">
                     <span class="inline-block w-4"></span>
                     {{ child.category.name }}
