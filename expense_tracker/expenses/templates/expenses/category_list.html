@@ -20,39 +20,51 @@
             <tr>
               <th>Name</th>
               <th>Type</th>
-              <th>Keywords (for CSV matching)</th>
+              <th>Keywords</th>
               <th>Actions</th>
             </tr>
           </thead>
-          <tbody>
-            {% for category, depth in category_tree %}
-              <tr {% if depth > 1 %}class="bg-slate-50/60"{% endif %}>
-                <td style="padding-left: {{ depth }}rem">
-                  <strong>{{ category.name }}</strong>
-                </td>
-                <td>{{ category.get_category_type_display }}</td>
-                <td>
-                  {% if depth == 1 %}
-                    {% if category.get_all_keywords %}
-                      <code class="keyword-pill">{{ category.get_all_keywords }}</code>
-                    {% else %}
-                      <span class="text-slate-400">No keywords</span>
-                    {% endif %}
+          {% for group in category_groups %}
+            <tbody x-data="{ open: false }">
+              {# Parent row #}
+              <tr>
+                <td style="padding-left: 1rem">
+                  {% if group.children %}
+                    <span
+                      class="inline-block w-4 cursor-pointer select-none text-slate-400"
+                      @click="open = !open"
+                      x-text="open ? '▼' : '▶'"
+                    ></span>
                   {% else %}
-                    {% if category.keywords %}
-                      <code class="keyword-pill">{{ category.keywords }}</code>
-                    {% else %}
-                      <span class="text-slate-400">No keywords</span>
-                    {% endif %}
+                    <span class="inline-block w-4"></span>
                   {% endif %}
+                  <strong
+                    {% if group.children %}class="cursor-pointer" @click="open = !open"{% endif %}
+                  >{{ group.parent.name }}</strong>
+                  {% if group.children %}
+                    <span class="ml-2 text-xs text-slate-400">({{ group.children|length }})</span>
+                  {% endif %}
+                </td>
+                <td>{{ group.parent.get_category_type_display }}</td>
+                <td>
+                  {% with kw_count=group.parent_keyword_count %}
+                    {% if kw_count > 0 %}
+                      <span
+                        class="text-sm text-slate-500"
+                        title="{{ group.parent_keywords_full }}"
+                      >{{ kw_count }} keyword{{ kw_count|pluralize }}</span>
+                    {% else %}
+                      <span class="text-sm text-slate-400">No keywords</span>
+                    {% endif %}
+                  {% endwith %}
                 </td>
                 <td>
                   <div class="flex items-center gap-3">
                     <a
-                      href="{% url 'category_edit' category.pk %}"
+                      href="{% url 'category_edit' group.parent.pk %}"
                       class="text-indigo-600 hover:text-indigo-800"
-                      aria-label="Edit {{ category.name }}"
-                      title="Edit {{ category.name }}"
+                      aria-label="Edit {{ group.parent.name }}"
+                      title="Edit {{ group.parent.name }}"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                         <path d="M12 20h9" />
@@ -60,10 +72,10 @@
                       </svg>
                     </a>
                     <a
-                      href="{% url 'category_delete' category.pk %}"
+                      href="{% url 'category_delete' group.parent.pk %}"
                       class="text-red-600 hover:text-red-800"
-                      aria-label="Delete {{ category.name }}"
-                      title="Delete {{ category.name }}"
+                      aria-label="Delete {{ group.parent.name }}"
+                      title="Delete {{ group.parent.name }}"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
                         <path fill-rule="evenodd" d="M8.5 2A1.5 1.5 0 007 3.5V4H4.75a.75.75 0 000 1.5h.538l.772 9.267A2.25 2.25 0 008.303 17h3.394a2.25 2.25 0 002.243-2.233l.772-9.267h.538a.75.75 0 000-1.5H13V3.5A1.5 1.5 0 0011.5 2h-3zm3 2V3.5a.5.5 0 00-.5-.5h-2a.5.5 0 00-.5.5V4h3zM8.75 8a.75.75 0 00-1.5 0v5a.75.75 0 001.5 0V8zm4 0a.75.75 0 00-1.5 0v5a.75.75 0 001.5 0V8z" clip-rule="evenodd" />
@@ -72,12 +84,61 @@
                   </div>
                 </td>
               </tr>
-            {% empty %}
+              {# Child rows #}
+              {% for child in group.children %}
+                <tr class="bg-slate-50/60" x-show="open" x-transition.opacity>
+                  <td style="padding-left: {{ child.depth }}rem">
+                    <span class="inline-block w-4"></span>
+                    {{ child.category.name }}
+                  </td>
+                  <td>{{ child.category.get_category_type_display }}</td>
+                  <td>
+                    {% with kw_count=child.keyword_count %}
+                      {% if kw_count > 0 %}
+                        <span
+                          class="text-sm text-slate-500"
+                          title="{{ child.keywords_full }}"
+                        >{{ kw_count }} keyword{{ kw_count|pluralize }}</span>
+                      {% else %}
+                        <span class="text-sm text-slate-400">No keywords</span>
+                      {% endif %}
+                    {% endwith %}
+                  </td>
+                  <td>
+                    <div class="flex items-center gap-3">
+                      <a
+                        href="{% url 'category_edit' child.category.pk %}"
+                        class="text-indigo-600 hover:text-indigo-800"
+                        aria-label="Edit {{ child.category.name }}"
+                        title="Edit {{ child.category.name }}"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                        </svg>
+                      </a>
+                      <a
+                        href="{% url 'category_delete' child.category.pk %}"
+                        class="text-red-600 hover:text-red-800"
+                        aria-label="Delete {{ child.category.name }}"
+                        title="Delete {{ child.category.name }}"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                          <path fill-rule="evenodd" d="M8.5 2A1.5 1.5 0 007 3.5V4H4.75a.75.75 0 000 1.5h.538l.772 9.267A2.25 2.25 0 008.303 17h3.394a2.25 2.25 0 002.243-2.233l.772-9.267h.538a.75.75 0 000-1.5H13V3.5A1.5 1.5 0 0011.5 2h-3zm3 2V3.5a.5.5 0 00-.5-.5h-2a.5.5 0 00-.5.5V4h3zM8.75 8a.75.75 0 00-1.5 0v5a.75.75 0 001.5 0V8zm4 0a.75.75 0 00-1.5 0v5a.75.75 0 001.5 0V8z" clip-rule="evenodd" />
+                        </svg>
+                      </a>
+                    </div>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          {% empty %}
+            <tbody>
               <tr>
                 <td colspan="4" class="text-center text-slate-500">No categories yet. <a class="font-medium text-indigo-600 hover:text-indigo-800" href="{% url 'category_add' %}">Add one</a></td>
               </tr>
-            {% endfor %}
-          </tbody>
+            </tbody>
+          {% endfor %}
         </table>
       </div>
     </section>

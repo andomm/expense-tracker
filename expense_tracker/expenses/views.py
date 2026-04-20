@@ -395,6 +395,15 @@ def expense_list(request):
     )
     active_month_label = active_month_date.strftime("%B %Y")
 
+    earliest = (
+        Expense.objects.filter(user=request.user)
+        .order_by("date")
+        .values_list("date", flat=True)
+        .first()
+    )
+    earliest_year = earliest.year if earliest else today.year
+    picker_years = list(range(earliest_year, today.year + 1))
+
     expenses_queryset = (
         Expense.objects.filter(user=request.user)
         .select_related(
@@ -507,6 +516,9 @@ def expense_list(request):
             "order_by": order_by,
             "category_filter_value": category_filter_value,
             "search_query": search_query,
+            "picker_years": picker_years,
+            "active_month_num": active_month_date.month,
+            "active_year": active_month_date.year,
             "expense_list_query_string": _build_expense_list_query_string(
                 {
                     "month": "all" if is_all else active_month_date.strftime("%Y-%m"),
@@ -750,28 +762,20 @@ def show_expenses_amount(request):
 
 @login_required
 def category_list(request):
-    """List the current user's categories as an ordered flat tree."""
+    """List the current user's categories as collapsible groups."""
 
-    def build_flat_tree(root_queryset) -> list[tuple]:
+    def build_category_groups(user) -> list[dict]:
         """
-        Return (category, depth) pairs ordered so each parent is immediately
-        followed by all its children (recursively), alphabetically within each level.
-        Loads the full subtree efficiently using a single query + Python grouping.
+        Build a list of category groups for the template.
+        Each group has: parent, parent_keyword_count, parent_keywords_full, children.
+        Children are dicts with: category, depth, keyword_count, keywords_full.
         """
-        root_ids = list(root_queryset.values_list("pk", flat=True))
-        if not root_ids:
-            return []
-
-        # Load all categories in the same tree(s) in one query
         all_cats = list(
-            Category.objects.filter(
-                models.Q(pk__in=root_ids)
-                | models.Q(parent_id__in=root_ids)
-                | models.Q(parent__parent_id__in=root_ids)
-                | models.Q(parent__parent__parent_id__in=root_ids)
-                | models.Q(parent__parent__parent__parent_id__in=root_ids)
-            ).select_related(
-                "parent", "parent__parent", "parent__parent__parent", "parent__parent__parent__parent"
+            Category.objects.filter(user=user).select_related(
+                "parent",
+                "parent__parent",
+                "parent__parent__parent",
+                "parent__parent__parent__parent",
             )
         )
 
@@ -782,26 +786,38 @@ def category_list(request):
         for children in by_parent.values():
             children.sort(key=lambda c: c.name.lower())
 
-        result: list[tuple] = []
+        groups = []
+        for root in by_parent.get(None, []):
+            children_list = []
 
-        def traverse(parent_id, depth):
-            for cat in by_parent.get(parent_id, []):
-                # Only start from actual roots of this queryset
-                if parent_id is None and cat.pk not in root_ids:
-                    continue
-                result.append((cat, depth))
-                traverse(cat.pk, depth + 1)
+            def collect_children(parent, depth):
+                for child in by_parent.get(parent.pk, []):
+                    kw_list = child.get_keywords_list()
+                    children_list.append({
+                        "category": child,
+                        "depth": depth,
+                        "keyword_count": len(kw_list),
+                        "keywords_full": ", ".join(kw_list),
+                    })
+                    collect_children(child, depth + 1)
 
-        traverse(None, 1)
-        return result
+            collect_children(root, 2)
 
-    user_roots = Category.objects.filter(user=request.user, parent__isnull=True)
+            all_kw = root.get_all_keywords_list()
+            groups.append({
+                "parent": root,
+                "parent_keyword_count": len(all_kw),
+                "parent_keywords_full": ", ".join(all_kw),
+                "children": children_list,
+            })
+
+        return groups
 
     return render(
         request,
         "expenses/category_list.html",
         {
-            "category_tree": build_flat_tree(user_roots),
+            "category_groups": build_category_groups(request.user),
         },
     )
 
