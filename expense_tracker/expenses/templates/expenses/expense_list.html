@@ -75,10 +75,6 @@
 			</div>
 
 			<div class="flex flex-wrap items-center gap-2">
-				<a href="?month={{ prev_month_str }}{% if order_param %}&order_by={{ order_param }}{% endif %}{% if cat_param %}&category_filter={{ cat_param }}{% endif %}{% if search_param %}&search={{ search_param }}{% endif %}"
-				   class="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
-					‹ Prev
-				</a>
 				<select id="picker-month" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300">
 					<option value="1" {% if active_month_num == 1 %}selected{% endif %}>January</option>
 					<option value="2" {% if active_month_num == 2 %}selected{% endif %}>February</option>
@@ -98,6 +94,10 @@
 						<option value="{{ yr }}" {% if yr == active_year %}selected{% endif %}>{{ yr }}</option>
 					{% endfor %}
 				</select>
+				<a href="?month={{ prev_month_str }}{% if order_param %}&order_by={{ order_param }}{% endif %}{% if cat_param %}&category_filter={{ cat_param }}{% endif %}{% if search_param %}&search={{ search_param }}{% endif %}"
+				   class="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
+					‹ Prev
+				</a>
 				{% if not is_current_month and not is_all %}
 					<a href="?month={{ next_month_str }}{% if order_param %}&order_by={{ order_param }}{% endif %}{% if cat_param %}&category_filter={{ cat_param }}{% endif %}{% if search_param %}&search={{ search_param }}{% endif %}"
 					   class="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
