@@ -46,6 +46,13 @@ from expenses.charts import (
 
 PREVIEW_LIMIT = 50
 
+_VALID_ORDER_BY = {
+    "-date", "date",
+    "-amount", "amount",
+    "-category_obj__name", "category_obj__name",
+    "-receiver", "receiver",
+}
+
 NON_EXPENSE_CATEGORY_TYPES = (
     Category.CATEGORY_TYPE_SAVING,
     Category.CATEGORY_TYPE_TRANSFER,
@@ -365,14 +372,14 @@ def _unique_expenses_from_rows(rows):
 def expense_list(request):
     form = SortForm(request.GET or None, user=request.user)
     bulk_category_form = BulkCategoryUpdateForm(user=request.user)
-    order_by = "-date"  # default order
+    order_by_param = request.GET.get("order_by", "")
+    order_by = order_by_param if order_by_param in _VALID_ORDER_BY else "-date"
     category_filter_value = ""
     search_query = ""
     active_category = None
     category_ids = None
 
     if form.is_valid():
-        order_by = form.cleaned_data.get("order_by") or "-date"
         category_filter_value = form.cleaned_data.get("category_filter") or ""
         search_query = form.cleaned_data.get("search", "").strip()
 

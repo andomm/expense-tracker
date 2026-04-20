@@ -94,21 +94,6 @@ def build_category_choices(
 
 
 class SortForm(forms.Form):
-    ORDER_CHOICES = [
-        ("-date", "Date — newest first"),
-        ("date", "Date — oldest first"),
-        ("-amount", "Amount — highest first"),
-        ("amount", "Amount — lowest first"),
-        ("-category_obj__name", "Category — Z to A"),
-        ("category_obj__name", "Category — A to Z"),
-        ("-receiver", "Receiver — Z to A"),
-        ("receiver", "Receiver — A to Z"),
-    ]
-    order_by = forms.ChoiceField(
-        choices=ORDER_CHOICES,
-        required=False,
-        label="Sort by",
-    )
     category_filter = forms.ChoiceField(
         choices=[],
         required=False,
