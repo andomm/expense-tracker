@@ -75,7 +75,7 @@ WSGI_APPLICATION = "expense_tracker.wsgi.application"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 # Use persistent volume /data on Railway, fallback to local for development
-DB_PATH = os.getenv('DB_PATH', BASE_DIR / "db.sqlite3")
+DB_PATH = str(os.getenv('DB_PATH', BASE_DIR / "db.sqlite3"))
 
 DATABASES = {
     "default": {
@@ -129,7 +129,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Use persistent volume /data on Railway, fallback to local for development
 MEDIA_URL = "/media/"  # URL path to access media files
-MEDIA_ROOT = os.getenv('MEDIA_ROOT', BASE_DIR / "media")  # Folder to store uploaded files
+MEDIA_ROOT = str(os.getenv('MEDIA_ROOT', BASE_DIR / "media"))  # Folder to store uploaded files
 # Where users go after login
 LOGIN_REDIRECT_URL = "/expenses/"  # or name your view with reverse_lazy
 
