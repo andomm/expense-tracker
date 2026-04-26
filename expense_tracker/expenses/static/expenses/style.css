@@ -577,6 +577,45 @@ tr:hover td {
     }
 }
 
+/* Split form table — reflow to stacked cards on mobile */
+@media (max-width: 767px) {
+    .split-parts-table thead {
+        display: none;
+    }
+
+    .split-parts-table tbody tr.split-row {
+        display: block;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.5rem;
+        margin-bottom: 0.5rem;
+        padding: 0.75rem;
+    }
+
+    .split-parts-table td {
+        display: block;
+        border: none;
+        padding: 0.25rem 0;
+    }
+
+    .split-parts-table td::before {
+        display: block;
+        margin-bottom: 0.2rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .split-parts-table td:nth-child(1)::before { content: "Split amount"; }
+    .split-parts-table td:nth-child(2)::before { content: "Split category"; }
+
+    .split-parts-table td:last-child {
+        text-align: right;
+        padding-top: 0.5rem;
+    }
+}
+
 @media (min-width: 768px) {
     .desktop-row {
         display: flex;
@@ -588,5 +627,30 @@ tr:hover td {
     .app-main {
         padding-left: 2rem;
         padding-right: 2rem;
+    }
+}
+
+/* Safe-area-inset padding for notched/gesture-bar phones (iPhone X+, Android) */
+.app-header {
+    padding-top: env(safe-area-inset-top);
+}
+
+.app-main {
+    padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+}
+
+@media (min-width: 640px) {
+    .app-main {
+        padding-left: max(1.5rem, env(safe-area-inset-left));
+        padding-right: max(1.5rem, env(safe-area-inset-right));
+    }
+}
+
+@media (min-width: 1024px) {
+    .app-main {
+        padding-left: max(2rem, env(safe-area-inset-left));
+        padding-right: max(2rem, env(safe-area-inset-right));
     }
 }
