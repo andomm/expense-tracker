@@ -577,6 +577,47 @@ tr:hover td {
     }
 }
 
+/* Safe area insets for notched/gesture-bar phones */
+
+/* Split form table — reflow to stacked cards on mobile */
+@media (max-width: 767px) {
+    .split-parts-table thead {
+        display: none;
+    }
+
+    .split-parts-table tbody tr.split-row {
+        display: block;
+        border: 1px solid #e2e8f0;
+        border-radius: 0.5rem;
+        margin-bottom: 0.5rem;
+        padding: 0.75rem;
+    }
+
+    .split-parts-table td {
+        display: block;
+        border: none;
+        padding: 0.25rem 0;
+    }
+
+    .split-parts-table td::before {
+        display: block;
+        margin-bottom: 0.2rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .split-parts-table td:nth-child(1)::before { content: "Split amount"; }
+    .split-parts-table td:nth-child(2)::before { content: "Split category"; }
+
+    .split-parts-table td:last-child {
+        text-align: right;
+        padding-top: 0.5rem;
+    }
+}
+
 @media (min-width: 768px) {
     .desktop-row {
         display: flex;
