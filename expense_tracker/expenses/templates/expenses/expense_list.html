@@ -107,88 +107,73 @@
 				{% endif %}
 			</div>
 
-			{# ── Mobile collapsible filter ── #}
-			<div class="mt-2 md:hidden" x-data="{ filtersOpen: false }">
+			{# ── Mobile collapsible filter + Desktop filter (fields rendered ONCE) ── #}
+			<div class="mt-2" x-data="{ filtersOpen: false }">
 				<button type="button"
 						@click="filtersOpen = !filtersOpen"
-						class="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700">
+						class="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 md:hidden">
 					<span>Filter &amp; sort</span>
 					<span x-text="filtersOpen ? '▴' : '▾'"></span>
 				</button>
-				<div x-show="filtersOpen" x-transition class="mt-2 flex flex-col gap-3">
-					<div class="flex flex-col gap-1">
-						<label for="id_category_filter" class="text-xs font-medium text-slate-500">Category</label>
-						{{ form.category_filter }}
+				<div :class="{ 'hidden': !filtersOpen }" class="mt-2 flex flex-col gap-3 md:mt-3 md:flex md:flex-wrap md:items-end md:justify-between md:gap-4">
+					<div class="flex flex-col gap-3 md:flex-row md:flex-wrap md:items-end md:gap-4">
+						<div class="flex flex-col gap-1">
+							<label for="id_category_filter" class="text-xs font-medium text-slate-500">Category</label>
+							{{ form.category_filter }}
+						</div>
+						<div class="flex flex-col gap-1 md:min-w-60">
+							<label for="id_search" class="text-xs font-medium text-slate-500">Search</label>
+							{{ form.search }}
+						</div>
+						<button type="submit"
+								class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700">
+							Apply
+						</button>
 					</div>
-					<div class="flex flex-col gap-1">
-						<label for="id_search" class="text-xs font-medium text-slate-500">Search</label>
-						{{ form.search }}
-					</div>
-					<button type="submit"
-							class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700">
-						Apply
-					</button>
-				</div>
-			</div>
-
-			{# ── Desktop layout ── #}
-			<div class="hidden md:flex md:flex-wrap md:items-end md:justify-between md:gap-4">
-				<div class="flex flex-wrap items-end gap-4">
-					<div class="flex flex-col gap-1">
-						<label for="id_category_filter" class="text-xs font-medium text-slate-500">Category</label>
-						{{ form.category_filter }}
-					</div>
-					<div class="flex min-w-60 flex-col gap-1">
-						<label for="id_search" class="text-xs font-medium text-slate-500">Search</label>
-						{{ form.search }}
-					</div>
-					<button type="submit" class="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-700">
-						Apply
-					</button>
-				</div>
-				<div class="flex flex-wrap items-center gap-2">
-					<select id="picker-month" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300">
-						<option value="1"  {% if active_month_num == 1  %}selected{% endif %}>January</option>
-						<option value="2"  {% if active_month_num == 2  %}selected{% endif %}>February</option>
-						<option value="3"  {% if active_month_num == 3  %}selected{% endif %}>March</option>
-						<option value="4"  {% if active_month_num == 4  %}selected{% endif %}>April</option>
-						<option value="5"  {% if active_month_num == 5  %}selected{% endif %}>May</option>
-						<option value="6"  {% if active_month_num == 6  %}selected{% endif %}>June</option>
-						<option value="7"  {% if active_month_num == 7  %}selected{% endif %}>July</option>
-						<option value="8"  {% if active_month_num == 8  %}selected{% endif %}>August</option>
-						<option value="9"  {% if active_month_num == 9  %}selected{% endif %}>September</option>
-						<option value="10" {% if active_month_num == 10 %}selected{% endif %}>October</option>
-						<option value="11" {% if active_month_num == 11 %}selected{% endif %}>November</option>
-						<option value="12" {% if active_month_num == 12 %}selected{% endif %}>December</option>
-					</select>
-					<select id="picker-year" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300">
-						{% for yr in picker_years %}
-							<option value="{{ yr }}" {% if yr == active_year %}selected{% endif %}>{{ yr }}</option>
-						{% endfor %}
-					</select>
-					<a href="?month={{ prev_month_str }}{% if order_param %}&order_by={{ order_param }}{% endif %}{% if cat_param %}&category_filter={{ cat_param }}{% endif %}{% if search_param %}&search={{ search_param }}{% endif %}"
-					   class="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
-						‹ Prev
-					</a>
-					{% if not is_current_month and not is_all %}
-						<a href="?month={{ next_month_str }}{% if order_param %}&order_by={{ order_param }}{% endif %}{% if cat_param %}&category_filter={{ cat_param }}{% endif %}{% if search_param %}&search={{ search_param }}{% endif %}"
+					<div class="hidden md:flex md:flex-wrap md:items-center md:gap-2">
+						<select id="picker-month" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300">
+							<option value="1"  {% if active_month_num == 1  %}selected{% endif %}>January</option>
+							<option value="2"  {% if active_month_num == 2  %}selected{% endif %}>February</option>
+							<option value="3"  {% if active_month_num == 3  %}selected{% endif %}>March</option>
+							<option value="4"  {% if active_month_num == 4  %}selected{% endif %}>April</option>
+							<option value="5"  {% if active_month_num == 5  %}selected{% endif %}>May</option>
+							<option value="6"  {% if active_month_num == 6  %}selected{% endif %}>June</option>
+							<option value="7"  {% if active_month_num == 7  %}selected{% endif %}>July</option>
+							<option value="8"  {% if active_month_num == 8  %}selected{% endif %}>August</option>
+							<option value="9"  {% if active_month_num == 9  %}selected{% endif %}>September</option>
+							<option value="10" {% if active_month_num == 10 %}selected{% endif %}>October</option>
+							<option value="11" {% if active_month_num == 11 %}selected{% endif %}>November</option>
+							<option value="12" {% if active_month_num == 12 %}selected{% endif %}>December</option>
+						</select>
+						<select id="picker-year" class="rounded-lg border border-slate-200 px-2 py-1.5 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-300">
+							{% for yr in picker_years %}
+								<option value="{{ yr }}" {% if yr == active_year %}selected{% endif %}>{{ yr }}</option>
+							{% endfor %}
+						</select>
+						<a href="?month={{ prev_month_str }}{% if order_param %}&order_by={{ order_param }}{% endif %}{% if cat_param %}&category_filter={{ cat_param }}{% endif %}{% if search_param %}&search={{ search_param }}{% endif %}"
 						   class="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
-							Next ›
+							‹ Prev
 						</a>
-					{% else %}
-						<span class="px-3 py-1.5 text-sm text-slate-300">Next ›</span>
-					{% endif %}
-					{% if is_all %}
-						<a href="?month={% now "Y-m" %}{% if order_param %}&order_by={{ order_param }}{% endif %}{% if cat_param %}&category_filter={{ cat_param }}{% endif %}{% if search_param %}&search={{ search_param }}{% endif %}"
-						   class="rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50">
-							Current month
-						</a>
-					{% else %}
-						<a href="?month=all{% if order_param %}&order_by={{ order_param }}{% endif %}{% if cat_param %}&category_filter={{ cat_param }}{% endif %}{% if search_param %}&search={{ search_param }}{% endif %}"
-						   class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50">
-							Show all
-						</a>
-					{% endif %}
+						{% if not is_current_month and not is_all %}
+							<a href="?month={{ next_month_str }}{% if order_param %}&order_by={{ order_param }}{% endif %}{% if cat_param %}&category_filter={{ cat_param }}{% endif %}{% if search_param %}&search={{ search_param }}{% endif %}"
+							   class="flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100">
+								Next ›
+							</a>
+						{% else %}
+							<span class="px-3 py-1.5 text-sm text-slate-300">Next ›</span>
+						{% endif %}
+						{% if is_all %}
+							<a href="?month={% now "Y-m" %}{% if order_param %}&order_by={{ order_param }}{% endif %}{% if cat_param %}&category_filter={{ cat_param }}{% endif %}{% if search_param %}&search={{ search_param }}{% endif %}"
+							   class="rounded-lg border border-indigo-200 px-3 py-1.5 text-xs font-medium text-indigo-600 hover:bg-indigo-50">
+								Current month
+							</a>
+						{% else %}
+							<a href="?month=all{% if order_param %}&order_by={{ order_param }}{% endif %}{% if cat_param %}&category_filter={{ cat_param }}{% endif %}{% if search_param %}&search={{ search_param }}{% endif %}"
+							   class="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-50">
+								Show all
+							</a>
+						{% endif %}
+					</div>
 				</div>
 			</div>
 
@@ -218,6 +203,7 @@
 					name="expense_ids"
 					value="{{ row.expense.pk }}"
 					class="expense-row-checkbox mt-1 shrink-0"
+					data-mobile-cb
 					aria-label="Select expense on {{ row.expense.date }}"
 				>
 				<a href="{% url 'expense_edit' row.expense.pk %}{% if expense_list_query_string %}?{{ expense_list_query_string }}{% endif %}" class="flex-1 min-w-0 no-underline text-inherit">
@@ -436,7 +422,7 @@
 		});
 
 		var selectAll = document.getElementById('select-all-expenses');
-		var rowCheckboxes = Array.from(document.querySelectorAll('.expense-row-checkbox'));
+		var rowCheckboxes = Array.from(document.querySelectorAll('.expense-row-checkbox:not([data-mobile-cb])'));
 
 		function updateSelectAllState() {
 			if (!selectAll) return;
@@ -470,7 +456,8 @@
 				if (!isOpen) {
 					var anyChecked = rowCheckboxes.some(function (cb) { return cb.checked; });
 					if (!anyChecked) {
-						var cb = btn.closest('tr').querySelector('.expense-row-checkbox');
+						var expId = btn.getAttribute('data-expense-id');
+						var cb = document.querySelector('.expense-row-checkbox[value="' + expId + '"]:not([data-mobile-cb])');
 						if (cb) { cb.checked = true; updateSelectAllState(); }
 					}
 					menu.classList.remove('hidden');

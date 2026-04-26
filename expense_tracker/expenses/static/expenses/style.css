@@ -577,8 +577,6 @@ tr:hover td {
     }
 }
 
-/* Safe area insets for notched/gesture-bar phones */
-
 /* Split form table — reflow to stacked cards on mobile */
 @media (max-width: 767px) {
     .split-parts-table thead {
