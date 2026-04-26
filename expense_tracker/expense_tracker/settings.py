@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,12 +21,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-ks1%j&b$3%t5-b80-kff_1=%41*jum1pvfe+s6!c75a!b+dp4m"
+SECRET_KEY = os.getenv('SECRET_KEY', "django-insecure-ks1%j&b$3%t5-b80-kff_1=%41*jum1pvfe+s6!c75a!b+dp4m")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost,192.168.1.212').split(',')
 
 
 # Application definition
@@ -73,10 +74,13 @@ WSGI_APPLICATION = "expense_tracker.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# Use persistent volume /data on Railway, fallback to local for development
+DB_PATH = os.getenv('DB_PATH', BASE_DIR / "db.sqlite3")
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": DB_PATH,
     }
 }
 
@@ -116,14 +120,16 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = "static/"
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# Use persistent volume /data on Railway, fallback to local for development
 MEDIA_URL = "/media/"  # URL path to access media files
-MEDIA_ROOT = BASE_DIR / "media"  # Folder to store uploaded files
+MEDIA_ROOT = os.getenv('MEDIA_ROOT', BASE_DIR / "media")  # Folder to store uploaded files
 # Where users go after login
 LOGIN_REDIRECT_URL = "/expenses/"  # or name your view with reverse_lazy
 

@@ -10,3 +10,4 @@ wheels/
 .venv
 todo.md
 *.sqlite3
+.superpowers/
