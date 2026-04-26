@@ -26,8 +26,11 @@ SECRET_KEY = os.getenv('SECRET_KEY', "django-insecure-ks1%j&b$3%t5-b80-kff_1=%41
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost,192.168.1.212').split(',')
-
+# ALLOWED_HOSTS - allow localhost in dev, specific hosts in production
+if DEBUG:
+    ALLOWED_HOSTS = ['*']  # Allow any host in debug mode
+else:
+    ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 # Application definition
 
@@ -43,6 +46,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
