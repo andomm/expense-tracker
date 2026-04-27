@@ -1,1 +1,1 @@
-web: cd expense_tracker && mkdir -p /data /data/media && python manage.py migrate && gunicorn expense_tracker.wsgi:application
+web: cd expense_tracker && mkdir -p /data /data/media && python manage.py collectstatic --noinput && python manage.py migrate && gunicorn expense_tracker.wsgi:application
