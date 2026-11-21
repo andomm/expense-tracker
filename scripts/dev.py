@@ -31,14 +31,15 @@ def stop_children(children: list[subprocess.Popen]) -> None:
 
 
 def main() -> int:
-    node = which("node")
-    if not node or not VITE.is_file():
-        sys.exit("Node.js and Vite are required. Run: npm ci --prefix frontend")
-
     env = os.environ.copy()
     env.setdefault("DB_PATH", str(ROOT / "expense_tracker/pilot.sqlite3"))
-    env.setdefault("REACT_EXPENSES_PILOT", "1")
     env.setdefault("DEBUG", "True")
+    env["LOCAL_REACT_DEV"] = "1"
+    use_vite = env["DEBUG"] == "True" and env.get("LEGACY_PAGES") != "1"
+    if use_vite:
+        node = which("node")
+        if not node or not VITE.is_file():
+            sys.exit("Node.js and Vite are required. Run: npm ci --prefix frontend")
     django_port = env.setdefault("DJANGO_PORT", "8000")
     vite_port = env.setdefault("VITE_PORT", "5173")
     try:
@@ -58,11 +59,12 @@ def main() -> int:
     signal.signal(signal.SIGTERM, lambda *_: stopping.set())
     children = []
     try:
-        children.append(
-            subprocess.Popen(
-                [node, str(VITE)], cwd=FRONTEND, env=env, start_new_session=True
+        if use_vite:
+            children.append(
+                subprocess.Popen(
+                    [node, str(VITE)], cwd=FRONTEND, env=env, start_new_session=True
+                )
             )
-        )
         children.append(
             subprocess.Popen(
                 [
@@ -77,7 +79,7 @@ def main() -> int:
             )
         )
         print(
-            f"Open http://127.0.0.1:{django_port}/expenses/  (Ctrl+C stops both servers)",
+            f"Open http://127.0.0.1:{django_port}/expenses/  (Ctrl+C stops the local app)",
             flush=True,
         )
         while not stopping.wait(timeout=0.2):

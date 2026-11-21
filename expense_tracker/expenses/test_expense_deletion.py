@@ -131,7 +131,7 @@ def test_single_delete_cannot_target_another_accounts_expense(ledger):
 
 
 def test_legacy_delete_all_still_requires_typed_confirmation(ledger, settings):
-    settings.REACT_EXPENSES_PILOT = False
+    settings.DEBUG = settings.LOCAL_REACT_DEV = settings.LEGACY_PAGES = True
     owner, other, _, _, _, foreign = ledger
     page = reverse("expense_delete_all")
     assert owner.get(page).context["count"] == 3
@@ -143,10 +143,11 @@ def test_legacy_delete_all_still_requires_typed_confirmation(ledger, settings):
 
 
 @pytest.mark.parametrize("all_expenses", [False, True], ids=["single", "account-wide"])
-def test_pilot_confirmation_urls_are_read_only_and_keep_local_filters(
+def test_react_confirmation_urls_are_read_only_and_keep_local_filters(
     ledger, settings, all_expenses
 ):
-    settings.DEBUG = settings.REACT_EXPENSES_PILOT = True
+    settings.DEBUG = settings.LOCAL_REACT_DEV = True
+    settings.LEGACY_PAGES = False
     owner, _, target, _, _, foreign = ledger
     name = "expense_delete_all" if all_expenses else "expense_delete"
     url = reverse(name, args=[] if all_expenses else [target])

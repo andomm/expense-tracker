@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react"
 import { BarChart3, Layers3, Moon, Sun, Tags, Upload, WalletCards } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Session } from "@/lib/api"
 
@@ -92,9 +91,6 @@ export function Shell({ config, session, children }: {
             <p className="eyebrow">Personal ledger</p>
             <h1>{titles[config.screen]}</h1>
           </div>
-          <Badge variant="secondary" className="gap-2 px-3 py-1">
-            <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" /> Expenses pilot
-          </Badge>
         </div>
         {children}
       </main>

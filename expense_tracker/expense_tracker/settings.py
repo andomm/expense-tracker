@@ -150,7 +150,8 @@ LOGIN_URL = "/login/"
 
 LOGOUT_REDIRECT_URL = "/login/"
 
-# Local-only opt-in. Without the runner, Django continues to serve legacy pages.
-REACT_EXPENSES_PILOT = os.getenv("REACT_EXPENSES_PILOT") == "1"
+# Set by scripts/dev.py, not by DEBUG alone. Plain Django keeps legacy routing.
+LOCAL_REACT_DEV = os.getenv("LOCAL_REACT_DEV") == "1"
+LEGACY_PAGES = os.getenv("LEGACY_PAGES") == "1"
 # Different hostname from Django keeps its cookies off the asset server.
 VITE_DEV_ORIGIN = f"http://localhost:{int(os.getenv('VITE_PORT', '5173'))}"

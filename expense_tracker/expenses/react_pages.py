@@ -91,12 +91,12 @@ def _list_context_url(
     return f"{url}?{urlencode(params)}" if params else url
 
 
-def pilot_page(screen: str, legacy: Callable[..., HttpResponse]):
-    """Opt a named Django page into the local React pilot, never a URL prefix."""
+def migrated_page(screen: str, legacy: Callable[..., HttpResponse]):
+    """Serve one explicitly mapped React screen in the local dev runner."""
 
     @wraps(legacy)
     def view(request: HttpRequest, **kwargs) -> HttpResponse:
-        if settings.DEBUG and settings.REACT_EXPENSES_PILOT:
+        if settings.DEBUG and settings.LOCAL_REACT_DEV and not settings.LEGACY_PAGES:
             return react_host(request, screen, **kwargs)
         return legacy(request, **kwargs)
 

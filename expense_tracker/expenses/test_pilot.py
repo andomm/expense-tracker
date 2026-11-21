@@ -23,16 +23,14 @@ def signed_in(db, client):
     return user
 
 
-def test_expense_list_opts_into_react_without_capturing_other_routes(
+def test_local_expenses_defaults_to_react_without_capturing_other_routes(
     signed_in, client, settings
 ):
-    path = reverse("expense_list")
-    settings.REACT_EXPENSES_PILOT = False
-    assert client.get(path).templates[0].name == "expenses/expense_list.html"
-
-    settings.DEBUG = True
-    settings.REACT_EXPENSES_PILOT = True
-    response = client.get(path, {"month": "all", "search": "fresh bread"})
+    settings.DEBUG = settings.LOCAL_REACT_DEV = True
+    settings.LEGACY_PAGES = False
+    response = client.get(
+        reverse("expense_list"), {"month": "all", "search": "fresh bread"}
+    )
     assert response.templates[0].name == "react_host.html"
     assert "no-store" in response.headers["Cache-Control"]
     assert "/@react-refresh" in response.content.decode()
@@ -49,7 +47,18 @@ def test_expense_list_opts_into_react_without_capturing_other_routes(
     ):
         assert client.get(path).status_code == 404
 
-    settings.DEBUG = False
+
+@pytest.mark.parametrize(
+    ("local", "legacy", "debug"),
+    [(False, False, True), (True, True, True), (True, False, False)],
+    ids=["plain-django", "legacy-fallback", "debug-disabled"],
+)
+def test_expense_list_keeps_legacy_outside_local_react_mode(
+    signed_in, client, settings, local, legacy, debug
+):
+    settings.LOCAL_REACT_DEV = local
+    settings.LEGACY_PAGES = legacy
+    settings.DEBUG = debug
     assert (
         client.get(reverse("expense_list")).templates[0].name
         == "expenses/expense_list.html"
@@ -59,7 +68,8 @@ def test_expense_list_opts_into_react_without_capturing_other_routes(
 def test_session_read_and_protected_page_preserve_legacy_login(
     signed_in, client, settings
 ):
-    settings.DEBUG = settings.REACT_EXPENSES_PILOT = True
+    settings.DEBUG = settings.LOCAL_REACT_DEV = True
+    settings.LEGACY_PAGES = False
     path = reverse("expense_list") + "?search=fresh%20bread"
     status_url = reverse("api:session")
 
@@ -271,10 +281,10 @@ def test_legacy_logout_requires_csrf_and_protected_api_returns_json_afterwards(
     assert "no-store" in response.headers["Cache-Control"]
 
 
-def test_filtered_pilot_link_keeps_search_when_served_by_legacy(
+def test_filtered_link_keeps_search_with_local_legacy_fallback(
     signed_in, client, settings, make_expense
 ):
-    settings.REACT_EXPENSES_PILOT = False
+    settings.DEBUG = settings.LOCAL_REACT_DEV = settings.LEGACY_PAGES = True
     match = make_expense(receiver="Corner shop")
     make_expense(receiver="Other store")
     response = client.get(

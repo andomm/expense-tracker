@@ -44,47 +44,33 @@ Interactive Plotly charts showing daily vs. cumulative spending, monthly compari
 
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/)
+- Node.js 20.19+ on Node 20, or 22.12+, and npm for React development
 
-### Setup
+### Local development
 
-```bash
-git clone https://github.com/andomm/expense-tracker.git
-cd expense-tracker
-
-# Install dependencies
-uv sync
-
-# Apply database migrations
-uv run --directory expense_tracker python manage.py migrate
-
-# Create an admin user
-uv run --directory expense_tracker python manage.py createsuperuser
-
-# Start the development server
-uv run --directory expense_tracker python manage.py runserver
-```
-
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
-
-### Expenses pilot (local)
-
-Requires Node.js 20.19+ on Node 20, or 22.12+, and npm in addition to the Python prerequisites. Run from a Linux or macOS shell. The pilot uses a separate local SQLite file by default. Create a test account in that database first:
+Run from the checkout in a Linux or macOS shell. The runner uses a separate local SQLite file. Migrate it and create a test account first:
 
 ```bash
+uv sync --locked
 npm ci --prefix frontend
 DB_PATH="$PWD/expense_tracker/pilot.sqlite3" uv run python expense_tracker/manage.py migrate
 DB_PATH="$PWD/expense_tracker/pilot.sqlite3" uv run python expense_tracker/manage.py createsuperuser
 uv run python scripts/dev.py
 ```
 
-Open [http://127.0.0.1:8000/expenses/](http://127.0.0.1:8000/expenses/) and sign in with the test account. Django serves pages and the session-protected API; Vite serves assets and refresh only. Use the Django URL as shown (not `localhost`). Ctrl+C stops both servers. To use different ports, prefix the command with e.g. `DJANGO_PORT=18009 VITE_PORT=15179`. To use a different database, pass its absolute path in `DB_PATH` to both setup and the runner.
+Open [http://127.0.0.1:8000/expenses/](http://127.0.0.1:8000/expenses/) and sign in. Use the Django URL as shown (not `localhost`). Django serves pages and the session-protected API; Vite serves development assets and refresh. Ctrl+C stops both servers. Set `DJANGO_PORT` and `VITE_PORT` to use other ports, or set an absolute `DB_PATH` for both setup and the runner to use a different database.
 
-Plain Django startup keeps the legacy Expenses pages. To compare with the same test database and ports, restart the runner with `REACT_EXPENSES_PILOT=0`. The pilot covers the list and add/edit forms, including share rules and category splits. Delete and bulk actions stay out of the pilot. Categories, Analytics, Import and sign-in still use legacy pages.
+React is the local runner default for the Expenses list, add/edit, and both delete confirmations. Bulk actions are part of the React list. Categories, Analytics, Import, and sign-in still use Django templates.
+
+To compare legacy pages locally, restart with `LEGACY_PAGES=1 uv run python scripts/dev.py`. This uses the same database and Django port without Node or Vite; it changes routing only and does not undo or replay writes. Plain Django `runserver` without the local runner also keeps legacy routing.
 
 Focused checks:
 
 ```bash
-uv run pytest --reuse-db expense_tracker/expenses/test_pilot.py expense_tracker/expenses/test_expense_forms_api.py
+work=$(mktemp -d)
+DB_PATH="$work/expenses.sqlite3" uv run pytest --reuse-db \
+  expense_tracker/expenses/test_pilot.py expense_tracker/expenses/test_expense_forms_api.py \
+  expense_tracker/expenses/test_expense_deletion.py expense_tracker/expenses/test_expense_bulk_api.py
 npm run build --prefix frontend
 ```
 
