@@ -43,14 +43,14 @@ export function readJson<T>(url: string, signal?: AbortSignal, userId?: number):
 
 // One attempt only. Callers decide how to handle session changes and uncertain outcomes.
 export function writeJson<T>(url: string, options: {
-  method: "POST" | "PUT"; csrfToken: string; userId: number; body: object; signal?: AbortSignal
-}): Promise<T> {
+  csrfToken: string; userId: number; signal?: AbortSignal
+} & ({ method: "POST" | "PUT"; body: object } | { method: "DELETE"; body?: never })): Promise<T> {
   return requestJson<T>(url, {
     method: options.method,
     signal: options.signal,
     headers: {
       Accept: "application/json",
-      "Content-Type": "application/json",
+      ...(options.body && { "Content-Type": "application/json" }),
       "X-CSRFToken": options.csrfToken,
       "X-Expense-Pilot-User": String(options.userId),
     },

@@ -348,10 +348,17 @@ def expense_delete(request, pk):
 
 @login_required
 def expense_delete_all(request):
-    if request.method == "POST":
-        Expense.objects.filter(user=request.user).delete()
+    expenses = Expense.objects.filter(user=request.user)
+    submitted = request.method == "POST"
+    if submitted and request.POST.get("confirmation") == "DELETE":
+        expenses.delete()
         return redirect("expense_list")
-    return render(request, "expenses/expense_confirm_delete_all.html")
+    return render(
+        request,
+        "expenses/expense_confirm_delete_all.html",
+        {"count": expenses.count(), "invalid_confirmation": submitted},
+        status=422 if submitted else 200,
+    )
 
 
 @login_required

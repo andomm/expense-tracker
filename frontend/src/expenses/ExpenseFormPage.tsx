@@ -90,9 +90,10 @@ function ExpenseEditor({ routes, urls, userId, session, onSessionChange, initial
   const [errors, setErrors] = useState<FieldErrors>({})
   const [failure, setFailure] = useState<Failure | null>(null)
   const [pending, setPending] = useState<"save" | "session" | null>(null)
-  const [confirmCancel, setConfirmCancel] = useState(false)
+  const [leaveTarget, setLeaveTarget] = useState<string | null>(null)
   const request = useRef<AbortController | null>(null)
   const leave = useRef(false)
+  const leaveTrigger = useRef<HTMLButtonElement | null>(null)
   const formElement = useRef<HTMLFormElement>(null)
   const feedback = useRef<HTMLDivElement>(null)
   const addSplitButton = useRef<HTMLButtonElement>(null)
@@ -218,15 +219,25 @@ function ExpenseEditor({ routes, urls, userId, session, onSessionChange, initial
     if (failure?.kind !== "check" && failure?.kind !== "missing") void run("save")
   }
 
-  function goBack() {
+  function navigate(url: string) {
     leave.current = true
-    window.location.assign(routes.returnUrl)
+    window.location.assign(url)
+  }
+
+  function prepareToLeave(url: string, trigger: HTMLButtonElement) {
+    if (request.current) return
+    if (!dirty) {
+      navigate(url)
+      return
+    }
+    leaveTrigger.current = trigger
+    setLeaveTarget(url)
   }
 
   const missing = failure?.kind === "missing"
   const checking = failure?.kind === "check"
   const showFailure = failure && (failure.kind !== "validation" || Object.keys(errors).length > 0)
-  return (
+  const form = (
     <form ref={formElement} aria-label={routes.detailApi ? "Edit expense" : "Add expense"} onSubmit={save} noValidate>
       {showFailure && <div className="expense-feedback" ref={feedback} tabIndex={-1} role="alert">
         <p className="font-bold">{failure.message}</p>
@@ -276,33 +287,53 @@ function ExpenseEditor({ routes, urls, userId, session, onSessionChange, initial
           <Button type="submit" disabled={checking || missing || Boolean(pending)}>
             {pending === "save" ? "Saving…" : pending === "session" ? "Checking session…" : "Save expense"}
           </Button>
-          <AlertDialog.Root open={confirmCancel} onOpenChange={setConfirmCancel}>
-            <AlertDialog.Trigger asChild>
-              <Button type="button" variant="outline" onClick={(event) => {
-                if (!dirty) { event.preventDefault(); goBack() }
-              }}>Cancel</Button>
-            </AlertDialog.Trigger>
-            <AlertDialog.Portal>
-              <AlertDialog.Overlay className="fixed inset-0 z-20 bg-black/50" />
-              <AlertDialog.Content className="expense-discard">
-                <AlertDialog.Title className="flex items-center gap-2 text-lg font-extrabold">
-                  <AlertTriangle className="size-5 text-destructive" aria-hidden="true" /> Discard unsaved changes?
-                </AlertDialog.Title>
-                <AlertDialog.Description className="text-sm text-muted-foreground">
-                  Your changes will be lost. Return to Expenses without saving?
-                </AlertDialog.Description>
-                <div className="flex flex-wrap gap-2">
-                  <AlertDialog.Cancel asChild><Button variant="outline">Keep editing</Button></AlertDialog.Cancel>
-                  <AlertDialog.Action asChild><Button variant="destructive" onClick={goBack}>Discard changes</Button></AlertDialog.Action>
-                </div>
-              </AlertDialog.Content>
-            </AlertDialog.Portal>
-          </AlertDialog.Root>
+          <Button type="button" variant="outline" onClick={(event) => prepareToLeave(routes.returnUrl, event.currentTarget)}>
+            Cancel
+          </Button>
           {pending && <span role="status" className="sr-only">
             {pending === "save" ? "Saving expense" : "Checking your session"}
           </span>}
         </div>
       </fieldset>
     </form>
+  )
+
+  const deleteUrl = routes.deleteUrl
+  return (
+    <AlertDialog.Root open={leaveTarget !== null} onOpenChange={(open) => { if (!open) setLeaveTarget(null) }}>
+      {form}
+      {deleteUrl && !missing && (
+        <section aria-labelledby="expense-delete-title" className="mt-6 grid justify-items-start gap-2 border-t pt-4">
+          <h2 id="expense-delete-title" className="font-extrabold">Remove this expense</h2>
+          <p className="text-sm text-muted-foreground">Review this expense before permanently deleting it.</p>
+          <Button type="button" variant="outline" className="h-11 text-destructive hover:text-destructive"
+            disabled={Boolean(pending)} onClick={(event) => prepareToLeave(deleteUrl, event.currentTarget)}>
+            Delete expense
+          </Button>
+        </section>
+      )}
+      <AlertDialog.Portal>
+        <AlertDialog.Overlay className="fixed inset-0 z-20 bg-black/50" />
+        <AlertDialog.Content className="expense-discard" onCloseAutoFocus={(event) => {
+          event.preventDefault()
+          if (!leave.current) leaveTrigger.current?.focus()
+        }}>
+          <AlertDialog.Title className="flex items-center gap-2 text-lg font-extrabold">
+            <AlertTriangle className="size-5 text-destructive" aria-hidden="true" /> Discard unsaved changes?
+          </AlertDialog.Title>
+          <AlertDialog.Description className="text-sm text-muted-foreground">
+            {leaveTarget === deleteUrl
+              ? "Your changes will be lost. Continue to review the deletion without saving?"
+              : "Your changes will be lost. Return to Expenses without saving?"}
+          </AlertDialog.Description>
+          <div className="flex flex-wrap gap-2">
+            <AlertDialog.Cancel asChild><Button variant="outline">Keep editing</Button></AlertDialog.Cancel>
+            <AlertDialog.Action asChild>
+              <Button variant="destructive" onClick={() => { if (leaveTarget) navigate(leaveTarget) }}>Discard changes</Button>
+            </AlertDialog.Action>
+          </div>
+        </AlertDialog.Content>
+      </AlertDialog.Portal>
+    </AlertDialog.Root>
   )
 }

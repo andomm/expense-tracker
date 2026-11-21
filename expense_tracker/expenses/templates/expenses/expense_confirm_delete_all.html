@@ -2,11 +2,21 @@
 {% block content %}
 <div class="mx-auto max-w-xl rounded-xl border border-red-200 bg-white p-6 shadow-sm">
   <h2>Delete all expenses</h2>
-  <p class="mb-4 text-slate-600">Are you sure you want to delete all expenses?</p>
-  <form method="post" class="flex gap-2">
+  <p class="mb-4 text-slate-600">This permanently deletes {{ count }} expense{{ count|pluralize }} from your account across all months and filters.</p>
+  <form method="post" class="grid gap-2">
     {% csrf_token %}
-    <button type="submit" class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Yes, delete</button>
-    <a href="{% url 'expense_list' %}" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</a>
+    <label for="confirmation">Type <strong>DELETE</strong> to confirm</label>
+    <input id="confirmation" name="confirmation" required autocomplete="off"
+           autocapitalize="off" spellcheck="false"
+           {% if invalid_confirmation %}aria-invalid="true" aria-describedby="confirmation-error"{% endif %}
+           class="w-full rounded-lg border border-slate-300 px-3 py-2">
+    {% if invalid_confirmation %}
+    <p id="confirmation-error" role="alert" class="text-red-700">Type DELETE exactly to continue.</p>
+    {% endif %}
+    <div class="flex flex-wrap gap-2">
+      <a href="{% url 'expense_list' %}" class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</a>
+      <button type="submit" class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">Delete all expenses</button>
+    </div>
   </form>
 </div>
 {% endblock %}

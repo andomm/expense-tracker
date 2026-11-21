@@ -11,6 +11,11 @@ urlpatterns = [
         expense_api.expense_form_options,
         name="expense-form-options",
     ),
+    path(
+        "expenses/delete-all/",
+        expense_api.expense_delete_all,
+        name="expense-delete-all",
+    ),
     path("expenses/preview/", expense_api.expense_preview, name="expense-preview"),
     path("expenses/<int:pk>/", expense_api.expense_detail, name="expense-detail"),
     path(

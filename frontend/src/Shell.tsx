@@ -10,17 +10,27 @@ export type FormRoutes = {
   optionsApi: string
   previewApi: string
   returnUrl: string
+  deleteUrl: string | null
 }
+
+export type DeletionRoutes = { api: string; returnUrl: string }
 
 export type AppUrls = Record<"expenses" | "addExpense" | "analytics" | "categories" | "upload"
   | "login" | "logout" | "sessionApi" | "expensesApi", string>
 
 export type AppConfig = { urls: AppUrls; userId: number } & (
-  | { screen: "expenses"; notices: string[] }
+  | { screen: "expenses"; notices: string[]; deleteAllUrl: string }
   | { screen: "expense-add" | "expense-edit"; form: FormRoutes }
+  | { screen: "expense-delete" | "expense-delete-all"; deletion: DeletionRoutes }
 )
 
-const titles = { expenses: "Expenses", "expense-add": "Add expense", "expense-edit": "Edit expense" }
+const titles = {
+  expenses: "Expenses",
+  "expense-add": "Add expense",
+  "expense-edit": "Edit expense",
+  "expense-delete": "Delete expense",
+  "expense-delete-all": "Delete all expenses",
+}
 
 export function signInHref(login: string) {
   return `${login}?${new URLSearchParams({ next: location.pathname + location.search })}`
@@ -92,11 +102,15 @@ export function Shell({ config, session, children }: {
   )
 }
 
-export function SignInNotice({ login, form = false }: { login: string; form?: boolean }) {
+export function SignInNotice({ login, form = false, deletion = false }: {
+  login: string; form?: boolean; deletion?: boolean
+}) {
   return (
     <div className="notice" role="alert">
       <h2>Sign in to see your expenses</h2>
-      <p>{form
+      <p>{deletion
+        ? "Your session ended or changed. Sign in to review the deletion again. Nothing will be sent automatically."
+        : form
         ? "Your session ended or changed. Sign in again to reopen this page. Unsaved changes will not be restored or sent."
         : "Your session ended or changed. Sign in again to return to these filters."}</p>
       <Button asChild><a href={signInHref(login)}>Sign in</a></Button>

@@ -12,8 +12,16 @@ urlpatterns = [
     ),
     path("bulk-delete/", views.expense_bulk_delete, name="expense_bulk_delete"),
     path("<int:pk>/edit/", pilot_page("expense-edit", views.expense_edit), name="expense_edit"),
-    path("<int:pk>/delete/", views.expense_delete, name="expense_delete"),
-    path("delete/", views.expense_delete_all, name="expense_delete_all"),
+    path(
+        "<int:pk>/delete/",
+        pilot_page("expense-delete", views.expense_delete),
+        name="expense_delete",
+    ),
+    path(
+        "delete/",
+        pilot_page("expense-delete-all", views.expense_delete_all),
+        name="expense_delete_all",
+    ),
     path("upload/", views.upload_csv, name="upload_csv"),
     path('upload/summary/', views.import_summary, name='import_summary'),
     path('expenses-per-month/', views.expenses_per_month, name='expenses_per_month'),

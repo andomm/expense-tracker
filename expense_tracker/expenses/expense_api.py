@@ -31,21 +31,45 @@ def expense_form_options(request: HttpRequest) -> JsonResponse:
     )
 
 
+@json_endpoint("GET", "POST")
+def expense_delete_all(request: HttpRequest) -> JsonResponse:
+    expenses = Expense.objects.filter(user=request.user)
+    if request.method != "POST":
+        return JsonResponse({"count": expenses.count()})
+
+    if json_object(request).get("confirmation") != "DELETE":
+        return api_error("validation_failed", "Type DELETE exactly to continue.", 422)
+
+    _, counts = expenses.delete()
+    count = counts.get(Expense._meta.label, 0)
+    messages.success(
+        request,
+        f"Deleted {count} expense{'s' if count != 1 else ''}."
+        if count
+        else "No expenses to delete.",
+    )
+    return JsonResponse({"deleted_count": count})
+
+
 def _not_found() -> JsonResponse:
     return api_error("not_found", "This expense was not found.", 404)
 
 
-@json_endpoint("GET", "PUT")
+@json_endpoint("GET", "PUT", "DELETE")
 def expense_detail(request: HttpRequest, pk: int) -> JsonResponse:
-    expenses = Expense.objects.filter(user=request.user)
+    expenses = Expense.objects.filter(user=request.user, pk=pk)
+    if request.method == "DELETE":
+        _, counts = expenses.delete()
+        if not counts.get(Expense._meta.label):
+            return _not_found()
+        messages.success(request, "Expense deleted.")
+        return JsonResponse({"deleted_count": 1})
     if request.method == "PUT":
         with transaction.atomic():
-            expense = expenses.select_for_update().filter(pk=pk).first()
+            expense = expenses.select_for_update().first()
             return _save(request, expense, status=200) if expense else _not_found()
 
-    expense = (
-        expenses.select_related("category_obj", "split_rule").filter(pk=pk).first()
-    )
+    expense = expenses.select_related("category_obj", "split_rule").first()
     if not expense:
         return _not_found()
     return JsonResponse(

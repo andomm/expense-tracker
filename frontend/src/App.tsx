@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react"
 
+import { Button } from "@/components/ui/button"
+import { ExpenseDeletePage, LoadingExpenseDeletion } from "./expenses/ExpenseDeletePage"
 import { ExpenseFormPage, LoadingExpenseForm } from "./expenses/ExpenseFormPage"
 import { ExpensesPage, LoadingExpenses } from "./expenses/ExpensesPage"
 import { ReadFailure, Shell, SignInNotice, type AppConfig } from "./Shell"
@@ -26,28 +28,49 @@ function SignedInApp({ config, initialSession }: { config: AppConfig; initialSes
     }
   }, [config.urls.sessionApi, config.userId])
 
-  return (
-    <Shell config={config} session={session}>
-      {!session ? <SignInNotice login={config.urls.login} form={config.screen !== "expenses"} /> :
-        config.screen === "expenses" ? <ExpensesPage urls={config.urls} notices={config.notices} userId={config.userId} /> :
-        <ExpenseFormPage routes={config.form} urls={config.urls} userId={config.userId}
-          session={session} onSessionChange={setSession} />}
-    </Shell>
-  )
+  let content
+  if (!session) {
+    content = <ScreenSignIn config={config} />
+  } else if (config.screen === "expenses") {
+    content = <>
+      <ExpensesPage urls={config.urls} notices={config.notices} userId={config.userId} />
+      <section aria-labelledby="account-actions-title" className="mt-8 grid justify-items-start gap-2 border-t pt-4">
+        <h2 id="account-actions-title" className="font-extrabold">Account actions</h2>
+        <p className="text-sm text-muted-foreground">This action applies to all months, regardless of your filters.</p>
+        <Button asChild variant="outline" className="h-11 text-destructive hover:text-destructive">
+          <a href={config.deleteAllUrl}>Delete all expenses</a>
+        </Button>
+      </section>
+    </>
+  } else if ("deletion" in config) {
+    content = <ExpenseDeletePage routes={config.deletion} allExpenses={config.screen === "expense-delete-all"}
+      urls={config.urls} userId={config.userId} session={session} onSessionChange={setSession} />
+  } else {
+    content = <ExpenseFormPage routes={config.form} urls={config.urls} userId={config.userId}
+      session={session} onSessionChange={setSession} />
+  }
+
+  return <Shell config={config} session={session}>{content}</Shell>
+}
+
+function ScreenSignIn({ config }: { config: AppConfig }) {
+  return <SignInNotice login={config.urls.login} form={"form" in config} deletion={"deletion" in config} />
 }
 
 export function App({ config }: { config: AppConfig }) {
   const { result, retry } = useRead<Session>(config.urls.sessionApi)
-  const isForm = config.screen !== "expenses"
+  const loading = "deletion" in config ? <LoadingExpenseDeletion /> :
+    "form" in config ? <LoadingExpenseForm /> : <LoadingExpenses />
+  const errorTitle = "deletion" in config ? "Could not open the confirmation" :
+    "form" in config ? "Could not open the expense form" : undefined
   if (result.state === "ready" && result.data.user?.id === config.userId) {
     return <SignedInApp config={config} initialSession={result.data} />
   }
   return (
     <Shell config={config} session={null}>
-      {result.state === "loading" ? (isForm ? <LoadingExpenseForm /> : <LoadingExpenses />) :
-        result.state === "error" ? <ReadFailure title={isForm ? "Could not open the expense form" : undefined}
-          message={result.message} retry={retry} /> :
-        <SignInNotice login={config.urls.login} form={isForm} />}
+      {result.state === "loading" ? loading :
+        result.state === "error" ? <ReadFailure title={errorTitle} message={result.message} retry={retry} /> :
+        <ScreenSignIn config={config} />}
     </Shell>
   )
 }

@@ -40,13 +40,26 @@ def react_host(
     }
     if screen == "expenses":
         app["notices"] = [str(message) for message in get_messages(request)]
+        app["deleteAllUrl"] = _list_context_url(request, "expense_delete_all")
+    elif screen in ("expense-delete", "expense-delete-all"):
+        app["deletion"] = {
+            "api": (
+                reverse("api:expense-detail", args=[pk])
+                if pk is not None
+                else reverse("api:expense-delete-all")
+            ),
+            "returnUrl": _list_context_url(request, "expense_list"),
+        }
     else:
         args = [] if pk is None else [pk]
         app["form"] = {
             "detailApi": reverse("api:expense-detail", args=args) if args else None,
             "optionsApi": reverse("api:expense-form-options"),
             "previewApi": reverse("api:expense-preview", args=args),
-            "returnUrl": _return_url(request),
+            "returnUrl": _list_context_url(request, "expense_list"),
+            "deleteUrl": _list_context_url(request, "expense_delete", args)
+            if args
+            else None,
         }
 
     return render(
@@ -59,19 +72,23 @@ def react_host(
                 "expenses": "Expenses",
                 "expense-add": "Add expense",
                 "expense-edit": "Edit expense",
+                "expense-delete": "Delete expense",
+                "expense-delete-all": "Delete all expenses",
             }[screen],
         },
     )
 
 
-def _return_url(request: HttpRequest) -> str:
+def _list_context_url(
+    request: HttpRequest, name: str, args: list[int] | None = None
+) -> str:
     params = {
         key: value
         for key in ("month", "order_by", "category_filter", "search", "page")
         if (value := request.GET.get(key))
     }
-    expense_list = reverse("expense_list")
-    return f"{expense_list}?{urlencode(params)}" if params else expense_list
+    url = reverse(name, args=args)
+    return f"{url}?{urlencode(params)}" if params else url
 
 
 def pilot_page(screen: str, legacy: Callable[..., HttpResponse]):
