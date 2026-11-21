@@ -153,6 +153,5 @@ LOGOUT_REDIRECT_URL = "/login/"
 # Set by scripts/dev.py, not by DEBUG alone. Plain Django keeps legacy routing.
 LOCAL_REACT_DEV = os.getenv("LOCAL_REACT_DEV") == "1"
 LEGACY_PAGES = os.getenv("LEGACY_PAGES") == "1"
-CSV_IMPORT_REACT_CANDIDATE = os.getenv("CSV_IMPORT_REACT_CANDIDATE") == "1"
 # Different hostname from Django keeps its cookies off the asset server.
 VITE_DEV_ORIGIN = f"http://localhost:{int(os.getenv('VITE_PORT', '5173'))}"

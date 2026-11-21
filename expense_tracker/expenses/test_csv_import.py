@@ -339,18 +339,17 @@ def test_legacy_upload_uses_the_same_atomic_import_and_repeatable_result(
 
 
 @pytest.mark.parametrize(
-    ("local", "debug", "legacy", "candidate", "react"),
+    ("local", "debug", "legacy", "react"),
     [
-        (True, True, False, True, True),
-        (True, True, False, False, False),
-        (True, True, True, True, False),
-        (False, True, False, True, False),
-        (True, False, False, True, False),
+        (True, True, False, True),
+        (True, True, True, False),
+        (False, True, False, False),
+        (True, False, False, False),
     ],
-    ids=["candidate", "default", "fallback", "plain-django", "debug-disabled"],
+    ids=["default", "fallback", "plain-django", "debug-disabled"],
 )
 def test_upload_and_result_routes_move_together(
-    accounts, settings, local, debug, legacy, candidate, react
+    accounts, settings, local, debug, legacy, react
 ):
     _, _, client, _ = accounts
     settings.LOCAL_REACT_DEV, settings.DEBUG, settings.LEGACY_PAGES = (
@@ -358,7 +357,6 @@ def test_upload_and_result_routes_move_together(
         debug,
         legacy,
     )
-    settings.CSV_IMPORT_REACT_CANDIDATE = candidate
     start = reverse("upload_csv")
     for url, screen, fallback in (
         (start, "csv-upload", "expenses/upload_csv.html"),

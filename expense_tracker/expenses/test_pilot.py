@@ -35,8 +35,8 @@ def test_local_expenses_defaults_to_react_without_capturing_other_routes(
     assert "no-store" in response.headers["Cache-Control"]
     assert "/@react-refresh" in response.content.decode()
     assert (
-        client.get(reverse("upload_csv")).templates[0].name
-        == "expenses/upload_csv.html"
+        client.get(reverse("expenses_per_month")).templates[0].name
+        == "expenses/expenses_per_month.html"
     )
     assert client.get(reverse("admin:index")).url.startswith("/admin/login/")
     for path in (
