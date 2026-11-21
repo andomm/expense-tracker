@@ -32,7 +32,11 @@ urlpatterns = [
         migrated_page("csv-import-result", views.import_summary),
         name="import_summary",
     ),
-    path('expenses-per-month/', views.expenses_per_month, name='expenses_per_month'),
+    path(
+        "expenses-per-month/",
+        migrated_page("analytics", views.expenses_per_month),
+        name="expenses_per_month",
+    ),
     path("categories/", migrated_page("categories", views.category_list), name="category_list"),
     path(
         "categories/sync/",

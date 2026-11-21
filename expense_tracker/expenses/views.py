@@ -1,4 +1,3 @@
-from datetime import date
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 
@@ -7,16 +6,17 @@ from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.db import models
+from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods, require_safe
 
-from .allocations import build_yearly_spending_summary
+from .analytics import read_analytics
 from .category_sync import latest_category_sync, record_category_sync
 from .category_tree import category_groups
 from .csv_import import latest_import, record_import
-from .expense_list import ExpenseFilters, month_key, picker_years, read_expense_list, shift_month
+from .expense_list import ExpenseFilters, month_key, picker_years, read_expense_list
 from .expense_save import save_expense, validate_expense
 from .importers import CSVError
 
@@ -31,66 +31,26 @@ from .forms import (
 
 from .models import Expense, Category
 
-from expenses.charts import (
-    create_category_breakdown,
-    create_cumulative_graph,
-    create_income_vs_expenses,
-    create_monthly_comparison,
-)
 
 @login_required
-def expenses_per_month(request):
-    today = date.today()
-    month_param = request.GET.get("month", "")
-    active_month_date = today.replace(day=1)
+def expenses_per_month(request: HttpRequest) -> HttpResponse:
+    # Only the legacy page needs Plotly; the API has no chart-library dependency.
+    from . import charts
 
-    if month_param:
-        try:
-            active_month_date = date.fromisoformat(month_param + "-01")
-        except ValueError:
-            pass
-
-    prev_month_str = shift_month(active_month_date, -1).strftime("%Y-%m")
-    next_month_date = shift_month(active_month_date, 1)
-    next_month_str = next_month_date.strftime("%Y-%m")
-    is_current_month = (
-        active_month_date.year == today.year and active_month_date.month == today.month
-    )
-    active_month_label = active_month_date.strftime("%B %Y")
-
-    yearly_totals = build_yearly_spending_summary(
-        Expense.objects.filter(user=request.user)
-        .select_related(
-            "category_obj",
-            "category_obj__parent",
-            "category_obj__parent__parent",
-            "category_obj__parent__parent__parent",
-            "category_obj__parent__parent__parent__parent",
-        )
-    )
-
-    cumulative_graph = create_cumulative_graph(request.user)
-    monthly_comparison = create_monthly_comparison(request.user)
-    category_breakdown = create_category_breakdown(
-        request.user,
-        active_month_date=active_month_date,
-    )
-    income_vs_expenses = create_income_vs_expenses(request.user)
-
+    data = read_analytics(request.user, request.GET.get("month", ""))
+    category = data["category"]
     return render(
         request,
         "expenses/expenses_per_month.html",
         {
-            "yearly_summary": yearly_totals,
-            "cumulative_graph": cumulative_graph,
-            "monthly_comparison": monthly_comparison,
-            "category_breakdown": category_breakdown,
-            "income_vs_expenses": income_vs_expenses,
-            "active_month_label": active_month_label,
-            "active_month_str": active_month_date.strftime("%Y-%m"),
-            "prev_month_str": prev_month_str,
-            "next_month_str": next_month_str,
-            "is_current_month": is_current_month,
+            "yearly_summary": data["yearly"],
+            "cumulative_graph": charts.render_daily_spending(data["daily"]),
+            "monthly_comparison": charts.render_monthly_spending(data["monthly"]),
+            "category_breakdown": charts.render_category_breakdown(category),
+            "income_vs_expenses": charts.render_cash_flow(data["cash_flow"]),
+            "active_month_label": category["label"],
+            "prev_month_str": category["previous"],
+            "next_month_str": category["next"],
         },
     )
 

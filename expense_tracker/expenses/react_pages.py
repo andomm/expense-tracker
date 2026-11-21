@@ -16,6 +16,7 @@ from .models import Category, Expense
 
 TITLES = {
     "expenses": "Expenses",
+    "analytics": "Analytics",
     "expense-add": "Add expense",
     "expense-edit": "Edit expense",
     "expense-delete": "Delete expense",
@@ -88,6 +89,8 @@ def react_host(
             "readApi": detail or reverse("api:category-form-options"),
             "writeApi": detail or reverse("api:categories"),
         }
+    elif screen == "analytics":
+        app["analyticsApi"] = reverse("api:analytics")
     elif screen == "expenses":
         app["notices"] = [str(message) for message in get_messages(request)]
     elif screen in ("expense-delete", "expense-delete-all"):
@@ -140,7 +143,8 @@ def migrated_page(screen: str, legacy: Callable[..., HttpResponse]):
     @wraps(legacy)
     def view(request: HttpRequest, **kwargs) -> HttpResponse:
         if settings.DEBUG and settings.LOCAL_REACT_DEV and not settings.LEGACY_PAGES:
-            return react_host(request, screen, **kwargs)
+            if screen != "analytics" or settings.ANALYTICS_REACT_CANDIDATE:
+                return react_host(request, screen, **kwargs)
         return legacy(request, **kwargs)
 
     return view

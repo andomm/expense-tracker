@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react"
+import { lazy, Suspense, useEffect, useState } from "react"
+
+import { LoadingAnalytics } from "./analytics/LoadingAnalytics"
 
 import { CategoriesPage, LoadingCategories } from "./categories/CategoriesPage"
 import { CategoryActionPage } from "./categories/CategoryActionPage"
@@ -10,6 +12,8 @@ import { ImportResultPage } from "./imports/ImportResultPage"
 import { LoadingImport, UploadPage } from "./imports/UploadPage"
 import { ReadFailure, Shell, SignInNotice, type AppConfig } from "./Shell"
 import { readJson, useRead, type Session } from "./lib/api"
+
+const AnalyticsPage = lazy(() => import("./analytics/AnalyticsPage"))
 
 function SignedInApp({ config, initialSession }: { config: AppConfig; initialSession: Session }) {
   const [session, setSession] = useState<Session | null>(initialSession)
@@ -35,6 +39,10 @@ function SignedInApp({ config, initialSession }: { config: AppConfig; initialSes
   let content
   if (!session) {
     content = <ScreenSignIn config={config} />
+  } else if (config.screen === "analytics") {
+    content = <Suspense fallback={<LoadingAnalytics />}>
+      <AnalyticsPage api={config.analyticsApi} login={config.urls.login} userId={config.userId} />
+    </Suspense>
   } else if (config.screen === "expenses") {
     content = <ExpensesPage urls={config.urls} notices={config.notices} userId={config.userId} />
   } else if ("categoryList" in config) {
@@ -64,7 +72,7 @@ function SignedInApp({ config, initialSession }: { config: AppConfig; initialSes
 }
 
 function ScreenSignIn({ config }: { config: AppConfig }) {
-  return <SignInNotice login={config.urls.login}
+  return <SignInNotice login={config.urls.login} analytics={config.screen === "analytics"}
     categories={"categoryList" in config || "categoryAction" in config}
     sync={"categorySync" in config}
     csvImport={"csvImport" in config}
@@ -77,11 +85,12 @@ export function App({ config }: { config: AppConfig }) {
   const categories = "categoryList" in config || "categoryAction" in config
   const sync = "categorySync" in config
   const csvImport = "csvImport" in config
-  const loading = sync ? <LoadingSync result={config.screen === "category-sync-result"} /> :
+  const analytics = config.screen === "analytics"
+  const loading = analytics ? <LoadingAnalytics /> : sync ? <LoadingSync result={config.screen === "category-sync-result"} /> :
     csvImport ? <LoadingImport result={config.screen === "csv-import-result"} /> :
     categories ? <LoadingCategories /> : "deletion" in config ? <LoadingExpenseDeletion /> :
     "form" in config ? <LoadingExpenseForm /> : <LoadingExpenses />
-  const errorTitle = sync ? "Could not open category sync" :
+  const errorTitle = analytics ? "Could not open Analytics" : sync ? "Could not open category sync" :
     csvImport ? "Could not open CSV import" :
     categories ? "Could not open Categories" : "deletion" in config ? "Could not open the confirmation" :
     "form" in config ? "Could not open the expense form" : undefined

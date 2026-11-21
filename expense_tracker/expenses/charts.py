@@ -1,15 +1,9 @@
-from collections import defaultdict
-from decimal import Decimal
+"""Plotly adapter for the retained legacy Analytics page."""
+
+from datetime import date
 
 import plotly.graph_objects as go
 from plotly.offline import plot
-
-from .allocations import (
-    NON_EXPENSE_CATEGORY_TYPES,
-    build_monthly_spending_summary,
-    get_expense_allocations,
-)
-from .models import Category, Expense
 
 CHART_FONT_FAMILY = "Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
 CHART_COLORWAY = [
@@ -26,20 +20,6 @@ LIGHT_TEXT_COLOR = "#0f172a"
 LIGHT_MUTED_TEXT = "#475569"
 LIGHT_GRID_COLOR = "rgba(148, 163, 184, 0.18)"
 LIGHT_AXIS_COLOR = "rgba(148, 163, 184, 0.38)"
-
-
-def _expense_queryset(user):
-    return (
-        Expense.objects.filter(user=user)
-        .select_related(
-            "category_obj",
-            "category_obj__parent",
-            "category_obj__parent__parent",
-            "category_obj__parent__parent__parent",
-            "category_obj__parent__parent__parent__parent",
-        )
-        .order_by("date", "pk")
-    )
 
 
 def _chart_layout(**overrides):
@@ -120,31 +100,10 @@ def _render_chart(fig):
     )
 
 
-def create_cumulative_graph(user):
-    """Create enhanced cumulative expenses graph with daily bars and cumulative line."""
-    daily_totals: dict = defaultdict(lambda: Decimal("0"))
-
-    for expense in _expense_queryset(user):
-        for allocation in get_expense_allocations(expense):
-            category_type = (
-                allocation.category.category_type
-                if allocation.category
-                else Category.CATEGORY_TYPE_EXPENSE
-            )
-            if category_type in NON_EXPENSE_CATEGORY_TYPES:
-                continue
-            daily_totals[expense.date] += allocation.amount
-
-    dates = []
-    daily_amounts = []
-    cumulative_amounts = []
-    cumulative_sum = 0
-
-    for day, total_spent in sorted(daily_totals.items()):
-        dates.append(day.strftime("%Y-%m-%d"))
-        cumulative_sum += float(total_spent)
-        daily_amounts.append(float(abs(total_spent)))
-        cumulative_amounts.append(abs(cumulative_sum))
+def render_daily_spending(rows: list[dict]) -> str:
+    dates = [row["date"].isoformat() for row in rows]
+    daily_amounts = [row["daily"] for row in rows]
+    cumulative_amounts = [row["cumulative"] for row in rows]
 
     if not dates:
         return _render_chart(_empty_figure("No spending data yet for this chart."))
@@ -189,16 +148,9 @@ def create_cumulative_graph(user):
     return _render_chart(fig)
 
 
-def create_monthly_comparison(user):
-    """Create monthly comparison bar chart."""
-    monthly_totals = build_monthly_spending_summary(_expense_queryset(user))
-
-    months = []
-    amounts = []
-
-    for item in monthly_totals:
-        months.append(item["month"].strftime("%b %Y"))
-        amounts.append(item["total_spent"])
+def render_monthly_spending(rows: list[dict]) -> str:
+    months = [date.fromisoformat(row["month"] + "-01").strftime("%b %Y") for row in rows]
+    amounts = [row["total_spent"] for row in rows]
 
     if not months:
         return _render_chart(_empty_figure("No monthly spending data yet."))
@@ -225,45 +177,9 @@ def create_monthly_comparison(user):
     return _render_chart(fig)
 
 
-def create_category_breakdown(
-    user,
-    *,
-    active_month_date=None,
-):
-    """Create category-based pie chart for the selected month."""
-    expenses = _expense_queryset(user)
-
-    if active_month_date is not None:
-        expenses = expenses.filter(
-            date__year=active_month_date.year,
-            date__month=active_month_date.month,
-        )
-
-    category_totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
-    for expense in expenses:
-        for allocation in get_expense_allocations(expense):
-            category_type = (
-                allocation.category.category_type
-                if allocation.category
-                else Category.CATEGORY_TYPE_EXPENSE
-            )
-            if category_type in NON_EXPENSE_CATEGORY_TYPES:
-                continue
-
-            if allocation.category:
-                root = allocation.category.get_root()
-                category_name = root.name
-            else:
-                category_name = "Uncategorized"
-            category_totals[category_name] += allocation.amount
-
-    sorted_totals = sorted(
-        category_totals.items(),
-        key=lambda item: abs(item[1]),
-        reverse=True,
-    )
-    categories = [name for name, _ in sorted_totals]
-    amounts = [float(abs(amount)) for _, amount in sorted_totals]
+def render_category_breakdown(breakdown: dict) -> str:
+    categories = [row["name"] for row in breakdown["rows"]]
+    amounts = [row["amount"] for row in breakdown["rows"]]
 
     if not categories:
         return _render_chart(_empty_figure("No category data for the selected month."))
@@ -275,17 +191,18 @@ def create_category_breakdown(
             values=amounts,
             hole=0.58,
             sort=False,
-            textinfo="percent",
+            text=[f"{row['percent']:.2f}%" for row in breakdown["rows"]],
+            textinfo="text",
             textposition="inside",
             marker=dict(
                 colors=CHART_COLORWAY,
                 line=dict(color="rgba(248, 250, 252, 0.95)", width=2),
             ),
-            hovertemplate="<b>%{label}</b><br>Spent €%{value:,.2f}<br>%{percent}<extra></extra>",
+            hovertemplate="<b>%{label}</b><br>Spent €%{value:,.2f}<br>%{text}<extra></extra>",
         )
     )
     fig.add_annotation(
-        text=f"Total<br><b>€{sum(amounts):,.2f}</b>",
+        text=f"Total<br><b>€{breakdown['total']:,.2f}</b>",
         x=0.5,
         y=0.5,
         showarrow=False,
@@ -313,42 +230,11 @@ def create_category_breakdown(
     return _render_chart(fig)
 
 
-def create_income_vs_expenses(user):
-    """Create income vs expenses chart with cumulative balance."""
-    daily_expenses: dict = defaultdict(lambda: Decimal("0"))
-    daily_income: dict = defaultdict(lambda: Decimal("0"))
-
-    for expense in _expense_queryset(user):
-        for allocation in get_expense_allocations(expense):
-            category_type = (
-                allocation.category.category_type
-                if allocation.category
-                else Category.CATEGORY_TYPE_EXPENSE
-            )
-            if category_type == Category.CATEGORY_TYPE_INCOME:
-                daily_income[expense.date] += allocation.amount
-            elif category_type not in NON_EXPENSE_CATEGORY_TYPES:
-                daily_expenses[expense.date] += allocation.amount
-
-    all_dates = sorted(set(daily_expenses) | set(daily_income))
-
-    dates = []
-    expenses_cumsum = 0
-    income_cumsum = 0
-    expenses_list = []
-    income_list = []
-    balance_list = []
-
-    for day in all_dates:
-        date_str = day.strftime("%Y-%m-%d")
-        dates.append(date_str)
-
-        expenses_cumsum += float(daily_expenses[day])
-        income_cumsum += float(daily_income[day])
-
-        expenses_list.append(abs(expenses_cumsum))
-        income_list.append(income_cumsum)
-        balance_list.append(income_cumsum + expenses_cumsum)
+def render_cash_flow(rows: list[dict]) -> str:
+    dates = [row["date"].isoformat() for row in rows]
+    expenses_list = [row["expenses"] for row in rows]
+    income_list = [row["income"] for row in rows]
+    balance_list = [row["balance"] for row in rows]
 
     if not dates:
         return _render_chart(_empty_figure("No income or spending data yet."))

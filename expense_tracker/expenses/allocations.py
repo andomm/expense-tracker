@@ -1,4 +1,3 @@
-from collections import defaultdict
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Iterable
@@ -82,43 +81,3 @@ def summarize_allocations(
 
 def summarize_expenses(expenses: Iterable[Expense]) -> dict[str, Decimal]:
     return summarize_allocations(iter_expense_allocations(expenses))
-
-
-def build_monthly_spending_summary(expenses: Iterable[Expense]) -> list[dict]:
-    monthly_totals: dict = defaultdict(lambda: Decimal("0"))
-
-    for allocation in iter_expense_allocations(expenses):
-        category_type = (
-            allocation.category.category_type
-            if allocation.category
-            else Category.CATEGORY_TYPE_EXPENSE
-        )
-        if category_type in NON_EXPENSE_CATEGORY_TYPES:
-            continue
-        month = allocation.expense.date.replace(day=1)
-        monthly_totals[month] += allocation.amount
-
-    return [
-        {"month": month, "total_spent": abs(total)}
-        for month, total in sorted(monthly_totals.items())
-    ]
-
-
-def build_yearly_spending_summary(expenses: Iterable[Expense]) -> list[dict]:
-    yearly_totals: dict = defaultdict(lambda: Decimal("0"))
-
-    for allocation in iter_expense_allocations(expenses):
-        category_type = (
-            allocation.category.category_type
-            if allocation.category
-            else Category.CATEGORY_TYPE_EXPENSE
-        )
-        if category_type in NON_EXPENSE_CATEGORY_TYPES:
-            continue
-        year = allocation.expense.date.year
-        yearly_totals[year] += allocation.amount
-
-    return [
-        {"year": year, "total_spent": abs(total)}
-        for year, total in sorted(yearly_totals.items())
-    ]

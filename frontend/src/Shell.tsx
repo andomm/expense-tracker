@@ -19,6 +19,7 @@ export type AppUrls = Record<"expenses" | "addExpense" | "deleteAllExpenses" | "
 
 export type AppConfig = { urls: AppUrls; userId: number } & (
   | { screen: "expenses"; notices: string[] }
+  | { screen: "analytics"; analyticsApi: string }
   | { screen: "expense-add" | "expense-edit"; form: FormRoutes }
   | { screen: "expense-delete" | "expense-delete-all"; deletion: DeletionRoutes }
   | { screen: "categories"; categoryList: CategoryListRoutes }
@@ -34,6 +35,7 @@ export type CsvImportRoutes = { resultUrl: string; startApi: string; latestApi: 
 
 const titles = {
   expenses: "Expenses",
+  analytics: "Analytics",
   "expense-add": "Add expense",
   "expense-edit": "Edit expense",
   "expense-delete": "Delete expense",
@@ -116,12 +118,12 @@ export function Shell({ config, session, children }: {
   )
 }
 
-export function SignInNotice({ login, form = false, deletion = false, categories = false, sync = false, csvImport = false }: {
-  login: string; form?: boolean; deletion?: boolean; categories?: boolean; sync?: boolean; csvImport?: boolean
+export function SignInNotice({ login, form = false, deletion = false, categories = false, sync = false, csvImport = false, analytics = false }: {
+  login: string; form?: boolean; deletion?: boolean; categories?: boolean; sync?: boolean; csvImport?: boolean; analytics?: boolean
 }) {
   return (
     <div className="notice" role="alert">
-      <h2>{csvImport ? "Sign in to use CSV import" : sync ? "Sign in to use category sync" : `Sign in to see your ${categories ? "categories" : "expenses"}`}</h2>
+      <h2>{csvImport ? "Sign in to use CSV import" : sync ? "Sign in to use category sync" : analytics ? "Sign in to see Analytics" : `Sign in to see your ${categories ? "categories" : "expenses"}`}</h2>
       <p>{csvImport
         ? "Your session ended or changed. Sign in to reopen this page. No file will be uploaded automatically."
         : sync
@@ -130,7 +132,7 @@ export function SignInNotice({ login, form = false, deletion = false, categories
         ? "Your session ended or changed. Sign in to review the deletion again. Nothing will be sent automatically."
         : form
         ? "Your session ended or changed. Sign in again to reopen this page. Unsaved changes will not be restored or sent."
-        : categories
+        : categories || analytics
         ? "Your session ended or changed. Sign in again to reopen this page."
         : "Your session ended or changed. Sign in again to return to these filters."}</p>
       <Button asChild><a href={signInHref(login)}>Sign in</a></Button>
