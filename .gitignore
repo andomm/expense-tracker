@@ -11,3 +11,4 @@ wheels/
 todo.md
 *.sqlite3
 .superpowers/
+/frontend/node_modules/

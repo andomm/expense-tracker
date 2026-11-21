@@ -1,0 +1,135 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Manrope Variable", sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--accent);
+  --color-secondary-foreground: var(--foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--foreground);
+  --color-muted: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+}
+
+:root {
+  color-scheme: light;
+  --background: #eff3ed;
+  --foreground: #162d25;
+  --card: #fcfdfb;
+  --primary: #245b48;
+  --primary-foreground: #fff;
+  --accent: #e1ece3;
+  --muted-foreground: #4c6358;
+  --border: #d3dfd5;
+  --input: #adbfb2;
+  --ring: #3b7a64;
+  --destructive: #af3439;
+  --balance: #1e4538;
+  --balance-text: #f2f8ef;
+  --balance-muted: #c2d8cd;
+}
+
+:root.dark {
+  color-scheme: dark;
+  --background: #121e19;
+  --foreground: #e4eee8;
+  --card: #1b2a23;
+  --primary: #b8e6cd;
+  --primary-foreground: #133b2c;
+  --accent: #284036;
+  --muted-foreground: #b2c8bc;
+  --border: #34493f;
+  --input: #536c5e;
+  --ring: #9bd8b8;
+  --destructive: #ff9b9a;
+  --balance: #254d3f;
+  --balance-text: #f0f8f2;
+  --balance-muted: #c7dfd3;
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground font-sans antialiased; }
+  a:focus-visible { @apply outline-2 outline-offset-2 outline-ring; }
+  button:not(:disabled), select:not(:disabled) { cursor: pointer; }
+}
+
+@layer components {
+  .frame { @apply mx-auto w-full max-w-[80rem] px-3 sm:px-6 lg:px-8; }
+  .skip-link { @apply fixed top-2 left-2 z-10 rounded-md bg-card px-4 py-3 not-focus:sr-only; }
+  .app-header { @apply border-b bg-card; }
+  .header-inner { @apply grid grid-cols-[1fr_auto] items-center gap-x-2 py-2 lg:grid-cols-[1fr_auto_1fr] lg:gap-4 lg:py-4; }
+  .brand { @apply col-start-1 row-start-1 inline-flex w-fit items-center gap-2 rounded font-extrabold tracking-tight; }
+  .brand svg { @apply shrink-0 text-primary; }
+  .brand strong { @apply font-semibold; }
+  .header-inner nav { @apply col-span-2 row-start-2 flex min-w-0 flex-wrap items-center gap-1 lg:col-span-1 lg:col-start-2 lg:row-start-1; }
+  .header-inner nav a { @apply inline-flex min-h-10 items-center gap-2 rounded-lg px-2 text-xs font-bold text-muted-foreground hover:bg-accent sm:px-3 sm:text-sm; }
+  .header-inner nav a[aria-current="page"] { @apply bg-accent text-foreground; }
+  .header-actions { @apply col-start-2 row-start-1 flex items-center justify-self-end lg:col-start-3; }
+  .header-actions button { @apply px-2 sm:px-3; }
+  .app-main { @apply pt-6 pb-16 focus:outline-none sm:pt-9; }
+  .page-title { @apply mb-6 flex flex-wrap items-end justify-between gap-3 sm:mb-8; }
+  .page-title h1 { @apply mt-1 text-4xl font-extrabold tracking-[-0.06em] sm:text-5xl; }
+  .eyebrow { @apply text-[0.7rem] font-extrabold tracking-[0.18em] text-muted-foreground uppercase; }
+  .ledger { @apply grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-8; }
+  .ledger > * { @apply min-w-0; }
+  .balance-card .eyebrow, .balance-note, .balance-foot { color: var(--balance-muted); }
+  .balance-amount { @apply text-[clamp(1.65rem,7vw,2.6rem)] leading-tight font-bold tracking-[-0.055em]; }
+  .balance-note, .balance-foot { @apply text-xs leading-relaxed; }
+  .balance-foot { @apply mt-3; }
+  .balance-card dl { @apply space-y-2 border-t border-white/20 pt-3 text-sm; }
+  .balance-card dl div, .balance-card dt { @apply flex items-center gap-2; }
+  .balance-card dl div { @apply flex-wrap justify-between; }
+  .balance-card svg { @apply text-[var(--balance-muted)]; }
+  .activity { @apply lg:col-start-2 lg:row-span-2 lg:row-start-1; }
+  .activity h2 { @apply mb-3 text-2xl font-extrabold tracking-tight; }
+  .filters { @apply space-y-3 rounded-xl border bg-card p-3 sm:p-4; }
+  .period { @apply flex flex-wrap items-center justify-between gap-x-2 gap-y-2; }
+  .period-navigation { @apply flex flex-wrap items-center gap-1 sm:gap-2; }
+  .month-picker { @apply flex flex-wrap items-center gap-2; }
+  .filters label { @apply text-xs font-bold text-muted-foreground; }
+  .month-picker label { @apply basis-full sm:basis-auto; }
+  .filter-form { @apply grid grid-cols-1 items-end gap-2 border-t pt-3 min-[360px]:grid-cols-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]; }
+  .filter-form > div { @apply min-w-0; }
+  .filter-form label { @apply mb-1 block; }
+  .filter-search { @apply col-span-full; }
+  .filter-form > button { @apply col-span-full justify-self-start sm:col-span-1; }
+  .filters [data-slot="input"], .filters [data-slot="native-select"] { @apply bg-background/60; }
+  .results-header { @apply py-3 text-sm font-semibold text-muted-foreground; }
+  .expense-rows { @apply space-y-2; }
+  .date-group { @apply grid gap-2 border-t py-3 sm:grid-cols-[7rem_minmax(0,1fr)]; }
+  .date-group h3 { @apply pt-2 text-xs font-extrabold tracking-wide text-muted-foreground uppercase; }
+  .expense-row { @apply grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-xl border bg-card px-3 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-3 sm:px-4; }
+  .receipt-icon { @apply hidden size-8 place-items-center rounded-lg bg-accent text-primary sm:grid; }
+  .row-description { @apply min-w-0 space-y-0.5 wrap-anywhere; }
+  .row-name { @apply text-sm font-extrabold; }
+  .small-note { @apply text-xs leading-relaxed text-muted-foreground; }
+  .row-note { @apply whitespace-pre-wrap; }
+  .money { @apply tabular-nums wrap-anywhere; }
+  .row-amounts { @apply space-y-1 text-right text-xs; }
+  .row-amounts dt { @apply text-[0.65rem] font-medium text-muted-foreground; }
+  .row-amounts dd { @apply text-sm font-bold; }
+  .top-card h2 { @apply font-extrabold; }
+  .top-card ol { @apply divide-y; }
+  .top-card li { @apply grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 py-2 text-sm font-bold wrap-anywhere; }
+  .top-card li:last-child { @apply pb-0; }
+  .pager { @apply mt-4 flex flex-wrap items-center justify-between gap-2 text-xs font-bold; }
+  .notice { @apply flex flex-col items-start gap-3 rounded-xl border bg-card p-4 sm:p-6; }
+  .notice h2, .notice h3 { @apply font-extrabold; }
+  .notice p { @apply text-sm text-muted-foreground; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="skeleton"] { animation: none; }
+}

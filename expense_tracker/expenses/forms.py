@@ -105,11 +105,14 @@ class SortForm(forms.Form):
         max_length=100,
     )
 
-    def __init__(self, *args, user=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        categories = list(get_user_category_queryset(user))
+    def __init__(self, data=None, *args, user=None, **kwargs):
+        if data is not None and data.get("category_filter") == "all":
+            data = data.copy()
+            data["category_filter"] = ""
+        super().__init__(data, *args, **kwargs)
+        self.categories = list(get_user_category_queryset(user))
         self.fields["category_filter"].choices = build_category_choices(
-            categories,
+            self.categories,
             empty_label="All categories",
             include_uncategorized=True,
         )

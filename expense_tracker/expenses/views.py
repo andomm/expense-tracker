@@ -1,5 +1,4 @@
 from datetime import date
-from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlencode
 
@@ -8,21 +7,13 @@ from django.contrib.auth import login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.db import models
-from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from .importers import get_importer
 
-from .allocations import (
-    ExpenseAllocation,
-    build_monthly_spending_summary,
-    build_yearly_spending_summary,
-    expense_matches_category_ids,
-    get_expense_allocations,
-    is_uncategorized_expense,
-    summarize_allocations,
-)
+from .allocations import build_yearly_spending_summary
+from .expense_list import ExpenseFilters, month_key, picker_years, read_expense_list, shift_month
 from .helpers import categorize_from_sources
 
 from .forms import (
@@ -32,7 +23,6 @@ from .forms import (
     ExpenseForm,
     SplitRowFormSet,
     SortForm,
-    UNCATEGORIZED_SENTINEL,
 )
 
 from .models import Expense, Category
@@ -46,41 +36,6 @@ from expenses.charts import (
 
 PREVIEW_LIMIT = 50
 
-_VALID_ORDER_BY = {
-    "-date", "date",
-    "-amount", "amount",
-    "-category_obj__name", "category_obj__name",
-    "-receiver", "receiver",
-}
-
-NON_EXPENSE_CATEGORY_TYPES = (
-    Category.CATEGORY_TYPE_SAVING,
-    Category.CATEGORY_TYPE_TRANSFER,
-    Category.CATEGORY_TYPE_INCOME,
-)
-
-
-@dataclass(frozen=True)
-class ExpenseListRow:
-    allocation: ExpenseAllocation
-
-    @property
-    def expense(self) -> Expense:
-        return self.allocation.expense
-
-    @property
-    def category(self) -> Category | None:
-        return self.allocation.category
-
-    @property
-    def category_name(self) -> str:
-        return self.category.name if self.category else "Uncategorized"
-
-    @property
-    def amount(self) -> Decimal:
-        return self.allocation.amount
-
-
 @login_required
 def expenses_per_month(request):
     today = date.today()
@@ -93,8 +48,8 @@ def expenses_per_month(request):
         except ValueError:
             pass
 
-    prev_month_str = _add_months(active_month_date, -1).strftime("%Y-%m")
-    next_month_date = _add_months(active_month_date, 1)
+    prev_month_str = shift_month(active_month_date, -1).strftime("%Y-%m")
+    next_month_date = shift_month(active_month_date, 1)
     next_month_str = next_month_date.strftime("%Y-%m")
     is_current_month = (
         active_month_date.year == today.year and active_month_date.month == today.month
@@ -136,14 +91,6 @@ def expenses_per_month(request):
             "is_current_month": is_current_month,
         },
     )
-
-
-def _add_months(d, months):
-    """Return a date shifted by `months` from d."""
-    month = d.month - 1 + months
-    year = d.year + month // 12
-    month = month % 12 + 1
-    return date(year, month, 1)
 
 
 def _build_expense_list_url(params):
@@ -329,209 +276,42 @@ def _build_split_summary(form, formset):
     }
 
 
-def _build_expense_rows(expenses):
-    rows: list[ExpenseListRow] = []
-
-    for expense in expenses:
-        allocations = get_expense_allocations(expense)
-        if not allocations:
-            continue
-        rows.append(ExpenseListRow(allocation=allocations[0]))
-
-    return rows
-
-
-def _expense_row_matches_search(row, search_query):
-    lowered_query = search_query.lower()
-    expense = row.expense
-    searchable_values = [
-        expense.receiver,
-        expense.description,
-        expense.category,
-        expense.category_obj.name if expense.category_obj else "",
-        row.category_name,
-    ]
-    return any(lowered_query in (value or "").lower() for value in searchable_values)
-
-
-def _unique_expenses_from_rows(rows):
-    seen_ids = set()
-    visible_expenses = []
-
-    for row in rows:
-        expense = row.expense
-        if expense.pk in seen_ids:
-            continue
-        seen_ids.add(expense.pk)
-        visible_expenses.append(expense)
-
-    return visible_expenses
-
-
 @login_required
 def expense_list(request):
     form = SortForm(request.GET or None, user=request.user)
-    bulk_category_form = BulkCategoryUpdateForm(user=request.user)
-    order_by_param = request.GET.get("order_by", "")
-    order_by = order_by_param if order_by_param in _VALID_ORDER_BY else "-date"
-    category_filter_value = ""
-    search_query = ""
-    active_category = None
-    category_ids = None
-
-    if form.is_valid():
-        category_filter_value = form.cleaned_data.get("category_filter") or ""
-        search_query = form.cleaned_data.get("search", "").strip()
-
-    today = date.today()
-    month_param = request.GET.get("month", "")
-    is_all = month_param == "all"
-
-    active_month_date = today.replace(day=1)
-    if not is_all and month_param:
-        try:
-            active_month_date = date.fromisoformat(month_param + "-01")
-        except ValueError:
-            pass
-
-    prev_month_str = _add_months(active_month_date, -1).strftime("%Y-%m")
-    next_month_date = _add_months(active_month_date, 1)
-    next_month_str = next_month_date.strftime("%Y-%m")
-    is_current_month = (
-        active_month_date.year == today.year and active_month_date.month == today.month
-    )
-    active_month_label = active_month_date.strftime("%B %Y")
-
-    earliest = (
-        Expense.objects.filter(user=request.user)
-        .order_by("date")
-        .values_list("date", flat=True)
-        .first()
-    )
-    earliest_year = earliest.year if earliest else today.year
-    picker_years = list(range(earliest_year, today.year + 1))
-
-    expenses_queryset = (
-        Expense.objects.filter(user=request.user)
-        .select_related(
-            "category_obj",
-            "category_obj__parent",
-            "category_obj__parent__parent",
-            "category_obj__parent__parent__parent",
-            "category_obj__parent__parent__parent__parent",
-            "split_rule",
-        )
-        .order_by(order_by)
-    )
-
-    if not is_all:
-        expenses_queryset = expenses_queryset.filter(
-            date__year=active_month_date.year,
-            date__month=active_month_date.month,
-        )
-
-    if search_query:
-        expenses_queryset = expenses_queryset.filter(
-            Q(receiver__icontains=search_query)
-            | Q(description__icontains=search_query)
-            | Q(category__icontains=search_query)
-            | Q(category_obj__name__icontains=search_query)
-        )
-
-    expenses = list(expenses_queryset)
-
-    if category_filter_value == UNCATEGORIZED_SENTINEL:
-        expenses = [expense for expense in expenses if is_uncategorized_expense(expense)]
-        active_category = "Uncategorized"
-    elif category_filter_value:
-        try:
-            cat = Category.objects.select_related(
-                "parent", "parent__parent", "parent__parent__parent", "parent__parent__parent__parent"
-            ).get(user=request.user, pk=int(category_filter_value))
-            descendant_ids = cat.get_all_descendant_ids()
-            category_ids = {cat.pk, *descendant_ids}
-            expenses = [
-                expense
-                for expense in expenses
-                if expense_matches_category_ids(expense, category_ids)
-            ]
-            has_descendants = bool(descendant_ids)
-            active_category = (
-                f"{cat.name} (+ subcategories)" if has_descendants else cat.name
-            )
-        except (Category.DoesNotExist, ValueError):
-            pass
-
-    expense_rows = _build_expense_rows(expenses)
-    if search_query:
-        expense_rows = [
-            row
-            for row in expense_rows
-            if _expense_row_matches_search(row, search_query)
-        ]
-
-    if category_filter_value == UNCATEGORIZED_SENTINEL:
-        expense_rows = [row for row in expense_rows if row.category is None]
-    elif category_ids:
-        expense_rows = [
-            row
-            for row in expense_rows
-            if row.category and row.category.pk in category_ids
-        ]
-
-    expenses = _unique_expenses_from_rows(expense_rows)
-
-    summary = summarize_allocations(row.allocation for row in expense_rows)
-    total_spent = summary["total_spent"]
-    income = summary["income"]
-    savings_total = summary["savings_total"]
-    balance = summary["balance"]
-
-    top_expenses = sorted(
-        [
-            row
-            for row in expense_rows
-            if row.amount < 0
-            and not (
-                row.category
-                and row.category.category_type in NON_EXPENSE_CATEGORY_TYPES
-            )
-        ],
-        key=lambda row: row.amount,
-    )[:5]
+    filters = ExpenseFilters.from_params(request.GET, form)
+    listing = read_expense_list(request.user, filters, form.categories)
+    active_month = filters.month
 
     return render(
         request,
         "expenses/expense_list.html",
         {
-            "expenses": expenses,
-            "expense_rows": expense_rows,
-            "total_spent": total_spent,
-            "income": income,
-            "savings_total": savings_total,
-            "balance": balance,
-            "top_expenses": top_expenses,
+            "expenses": [row.expense for row in listing.rows],
+            "expense_rows": listing.rows,
+            **listing.summary(),
+            "top_expenses": listing.top_expenses(),
             "form": form,
-            "bulk_category_form": bulk_category_form,
-            "active_category": active_category,
-            "active_month_label": active_month_label,
-            "active_month_str": active_month_date.strftime("%Y-%m"),
-            "prev_month_str": prev_month_str,
-            "next_month_str": next_month_str,
-            "is_current_month": is_current_month,
-            "is_all": is_all,
-            "order_by": order_by,
-            "category_filter_value": category_filter_value,
-            "search_query": search_query,
-            "picker_years": picker_years,
-            "active_month_num": active_month_date.month,
-            "active_year": active_month_date.year,
+            "bulk_category_form": BulkCategoryUpdateForm(user=request.user),
+            "active_category": listing.active_category,
+            "active_month_label": active_month.strftime("%B %Y"),
+            "active_month_str": month_key(active_month),
+            "prev_month_str": filters.previous,
+            "next_month_str": filters.next,
+            "is_current_month": active_month == filters.current_month,
+            "is_all": filters.is_all,
+            "order_by": filters.order_by,
+            "category_filter_value": filters.category_filter,
+            "search_query": filters.search,
+            "picker_years": picker_years(request.user, filters.current_month),
+            "active_month_num": active_month.month,
+            "active_year": active_month.year,
             "expense_list_query_string": _build_expense_list_query_string(
                 {
-                    "month": "all" if is_all else active_month_date.strftime("%Y-%m"),
-                    "order_by": order_by,
-                    "category_filter": category_filter_value,
-                    "search": search_query,
+                    "month": filters.period,
+                    "order_by": filters.order_by,
+                    "category_filter": filters.category_filter,
+                    "search": filters.search,
                 }
             ),
         },
