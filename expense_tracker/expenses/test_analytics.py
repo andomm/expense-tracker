@@ -205,19 +205,17 @@ def test_zero_personal_share_counts_as_a_recorded_zero_in_all_groups(client, acc
 
 
 @pytest.mark.parametrize(
-    ("local", "legacy", "debug", "candidate", "react"),
+    ("local", "legacy", "debug", "react"),
     [
-        (True, False, True, True, True),
-        (True, False, True, False, False),
-        (True, True, True, True, False),
-        (False, False, True, True, False),
-        (True, False, False, True, False),
+        (True, False, True, True),
+        (True, True, True, False),
+        (False, False, True, False),
+        (True, False, False, False),
     ],
-    ids=["candidate", "default-legacy", "fallback", "plain-django", "debug-disabled"],
+    ids=["default-react", "fallback", "plain-django", "debug-disabled"],
 )
-def test_analytics_route_is_explicit(client, accounts, settings, local, legacy, debug, candidate, react):
+def test_analytics_route_is_explicit(client, accounts, settings, local, legacy, debug, react):
     settings.LOCAL_REACT_DEV, settings.LEGACY_PAGES, settings.DEBUG = local, legacy, debug
-    settings.ANALYTICS_REACT_CANDIDATE = candidate
     url = reverse("expenses_per_month")
     response = client.get(url, {"month": "2026-01"})
     assert response.status_code == 200

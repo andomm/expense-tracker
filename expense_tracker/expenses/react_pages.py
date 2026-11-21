@@ -143,8 +143,7 @@ def migrated_page(screen: str, legacy: Callable[..., HttpResponse]):
     @wraps(legacy)
     def view(request: HttpRequest, **kwargs) -> HttpResponse:
         if settings.DEBUG and settings.LOCAL_REACT_DEV and not settings.LEGACY_PAGES:
-            if screen != "analytics" or settings.ANALYTICS_REACT_CANDIDATE:
-                return react_host(request, screen, **kwargs)
+            return react_host(request, screen, **kwargs)
         return legacy(request, **kwargs)
 
     return view
