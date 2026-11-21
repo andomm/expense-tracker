@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import api, expense_api
+from . import expense_bulk_api as bulk
 
 app_name = "api"
 urlpatterns = [
@@ -22,5 +23,13 @@ urlpatterns = [
         "expenses/<int:pk>/preview/",
         expense_api.expense_preview,
         name="expense-preview",
+    ),
+    path("expenses/bulk/confirm/", bulk.confirm, name="expense-bulk-confirm"),
+    path("expenses/bulk/delete/", bulk.apply, name="expense-bulk-delete"),
+    path(
+        "expenses/bulk/recategorize/",
+        bulk.apply,
+        {"recategorize": True},
+        name="expense-bulk-recategorize",
     ),
 ]

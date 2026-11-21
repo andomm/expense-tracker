@@ -26,8 +26,8 @@ export type ExpenseList = {
   top_expenses: Expense[]
 }
 
-export function listRequestUrl(endpoint: string) {
-  const incoming = new URLSearchParams(window.location.search)
+export function listRequestUrl(endpoint: string, search: string) {
+  const incoming = new URLSearchParams(search)
   const params = new URLSearchParams()
   for (const name of ["month", "category_filter", "order_by", "search", "page"]) {
     const value = incoming.getAll(name).at(-1)

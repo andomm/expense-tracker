@@ -1,5 +1,5 @@
 import { ArrowDownLeft, ArrowUpRight, Bookmark, CheckCircle2, Plus, Receipt } from "lucide-react"
-import { useEffect } from "react"
+import { useEffect, useRef, useState, type MouseEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -7,7 +7,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useRead } from "@/lib/api"
 import { ReadFailure, SignInNotice, type AppUrls } from "@/Shell"
 
+import { BulkExpenseActions } from "./BulkExpenseActions"
 import { ExpenseFilters } from "./ExpenseFilters"
+import { emptySelection, type BulkSelection } from "./bulk"
 import { displayDate, euro, expenseContextHref, listHref, listRequestUrl, type Expense, type ExpenseList } from "./read"
 
 function Balance({ summary, allDates }: { summary: ExpenseList["summary"]; allDates: boolean }) {
@@ -64,13 +66,18 @@ function TopExpenses({ rows }: { rows: Expense[] }) {
   )
 }
 
-function ExpenseRow({ row, showDate, context }: {
-  row: Expense; showDate: boolean; context: (path: string) => string
+type RowSelection = { ids: ReadonlySet<number>; toggle: (id: number) => void }
+
+function ExpenseRow({ row, showDate, context, selection }: {
+  row: Expense; showDate: boolean; context: (path: string) => string; selection?: RowSelection
 }) {
   const name = row.receiver || row.description || "No receiver or description"
   return (
-    <li className="expense-row">
-      <span className="receipt-icon"><Receipt size={17} aria-hidden="true" /></span>
+    <li className={selection ? "expense-row grid-cols-[auto_minmax(0,1fr)_auto]" : "expense-row"}>
+      {selection ? <label className="grid size-8 cursor-pointer place-items-center rounded-md hover:bg-accent has-focus-visible:ring-2 has-focus-visible:ring-ring sm:size-9">
+        <input type="checkbox" className="size-4 cursor-pointer accent-primary" aria-label={`Select expense: ${name}`}
+          checked={selection.ids.has(row.id)} onChange={() => selection.toggle(row.id)} />
+      </label> : <span className="receipt-icon"><Receipt size={17} aria-hidden="true" /></span>}
       <div className="row-description">
         <p className="row-name">{name}</p>
         <p className="small-note">{row.category?.name ?? "Uncategorized"}</p>
@@ -92,10 +99,12 @@ function ExpenseRow({ row, showDate, context }: {
   )
 }
 
-function ExpenseRows({ list, context }: { list: ExpenseList; context: (path: string) => string }) {
+function ExpenseRows({ list, context, selection }: {
+  list: ExpenseList; context: (path: string) => string; selection?: RowSelection
+}) {
   if (list.filters.order_by.replace(/^-/, "") !== "date") {
     return <ul className="expense-rows" aria-label="Expenses on this page">
-      {list.rows.map((row) => <ExpenseRow key={row.id} row={row} context={context} showDate />)}
+      {list.rows.map((row) => <ExpenseRow key={row.id} row={row} context={context} selection={selection} showDate />)}
     </ul>
   }
 
@@ -116,14 +125,16 @@ function ExpenseRows({ list, context }: { list: ExpenseList; context: (path: str
           <time dateTime={day}>{displayDate(day, { day: "numeric", month: "short", year: "numeric" })}</time>
         </h3>
         <ul className="expense-rows">
-          {rows.map((row) => <ExpenseRow key={row.id} row={row} context={context} showDate={false} />)}
+          {rows.map((row) => <ExpenseRow key={row.id} row={row} context={context} selection={selection} showDate={false} />)}
         </ul>
       </section>
     ))}
   </div>
 }
 
-function Pagination({ path, list }: { path: string; list: ExpenseList }) {
+function Pagination({ path, list, navigate }: {
+  path: string; list: ExpenseList; navigate: (event: MouseEvent<HTMLAnchorElement>) => void
+}) {
   const { page, pages } = list.pagination
   if (pages < 2) {
     return null
@@ -132,11 +143,11 @@ function Pagination({ path, list }: { path: string; list: ExpenseList }) {
   return (
     <nav className="pager" aria-label="Expense pages">
       {page > 1
-        ? <Button asChild variant="outline"><a href={listHref(path, list.filters, page - 1)}>Previous page</a></Button>
+        ? <Button asChild variant="outline"><a href={listHref(path, list.filters, page - 1)} onClick={navigate}>Previous page</a></Button>
         : <span />}
       <span>Page {page} of {pages}</span>
       {page < pages
-        ? <Button asChild variant="outline"><a href={listHref(path, list.filters, page + 1)}>Next page</a></Button>
+        ? <Button asChild variant="outline"><a href={listHref(path, list.filters, page + 1)} onClick={navigate}>Next page</a></Button>
         : <span />}
     </nav>
   )
@@ -155,10 +166,69 @@ export function LoadingExpenses() {
   )
 }
 
-export function ExpensesPage({ urls, notices, userId }: { urls: AppUrls; notices: string[]; userId: number }) {
-  const { result, retry } = useRead<ExpenseList>(listRequestUrl(urls.expensesApi), userId)
+type PageProps = { urls: AppUrls; notices: string[]; userId: number }
+type ScopedSelection = { key: string; value: BulkSelection }
+
+export function ExpensesPage({ urls, notices, userId }: PageProps) {
+  const [search, setSearch] = useState(window.location.search)
+  const [selected, setSelected] = useState<ScopedSelection | null>(null)
+  const [success, setSuccess] = useState("")
+  const [signedOut, setSignedOut] = useState(false)
+  const [restores, setRestores] = useState(0)
+  const request = listRequestUrl(urls.expensesApi, search)
+
   useEffect(() => {
-    if (result.state === "ready" && location.hash === "#activity") {
+    const sync = () => setSearch(window.location.search)
+    const restore = (event: PageTransitionEvent) => {
+      if (!event.persisted) return
+      // Returning from a different document must not restore a selection draft.
+      setSelected(null)
+      setSuccess("")
+      setRestores((value) => value + 1)
+      sync()
+    }
+    window.addEventListener("popstate", sync)
+    window.addEventListener("pageshow", restore)
+    return () => {
+      window.removeEventListener("popstate", sync)
+      window.removeEventListener("pageshow", restore)
+    }
+  }, [])
+
+  function navigate(event: MouseEvent<HTMLAnchorElement>) {
+    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    window.history.pushState(null, "", event.currentTarget.href)
+    setSearch(window.location.search)
+  }
+
+  if (signedOut) return <SignInNotice login={urls.login} />
+  return <ExpensesResults key={`${userId}:${restores}:${request}`} request={request} urls={urls}
+    notices={success ? [...notices, success] : notices} userId={userId} navigate={navigate}
+    selected={selected} setSelected={setSelected} onSuccess={setSuccess}
+    onSessionChanged={() => { setSelected(null); setSuccess(""); setSignedOut(true) }} />
+}
+
+function ExpensesResults({ urls, notices, userId, request, navigate, selected, setSelected,
+  onSuccess, onSessionChanged }: PageProps & {
+  request: string; navigate: (event: MouseEvent<HTMLAnchorElement>) => void
+  selected: ScopedSelection | null; setSelected: (value: ScopedSelection | null) => void
+  onSuccess: (message: string) => void; onSessionChanged: () => void
+}) {
+  const { result, retry } = useRead<ExpenseList>(request, userId)
+  const focusAfterRefresh = useRef(false)
+  function refresh() {
+    focusAfterRefresh.current = true
+    retry()
+  }
+  const scope = result.state === "ready" ? `${userId}:${expenseContextHref(urls.expenses, result.data.filters)}` : null
+  useEffect(() => {
+    if (!scope) return
+    if (selected && selected.key !== scope) setSelected(null)
+  }, [scope, selected, setSelected])
+  useEffect(() => {
+    if (result.state === "ready" && (location.hash === "#activity" || focusAfterRefresh.current)) {
+      focusAfterRefresh.current = false
       document.getElementById("activity")?.focus()
     }
   }, [result.state])
@@ -172,6 +242,16 @@ export function ExpensesPage({ urls, notices, userId }: { urls: AppUrls; notices
   }
 
   const list = result.data
+  const selection = selected && selected.key === scope ? selected.value : emptySelection
+  const setSelection = (value: BulkSelection) => setSelected(scope ? { key: scope, value } : null)
+  const rowSelection: RowSelection | undefined = selection.mode === "explicit" ? {
+    ids: selection.ids,
+    toggle(id) {
+      const ids = new Set(selection.ids)
+      if (!ids.delete(id)) ids.add(id)
+      setSelection({ mode: "explicit", ids })
+    },
+  } : undefined
   const { page, page_size: pageSize, count } = list.pagination
   const context = (path: string) => expenseContextHref(path, list.filters, page > 1 ? page : undefined)
   const firstRow = (page - 1) * pageSize + 1
@@ -196,14 +276,17 @@ export function ExpensesPage({ urls, notices, userId }: { urls: AppUrls; notices
         <div id="activity" className="results-header" tabIndex={-1}>
           <p role="status">{resultLabel}</p>
         </div>
-        {count ? <ExpenseRows list={list} context={context} /> : (
+        <BulkExpenseActions urls={urls} userId={userId} list={list} selection={selection}
+          onSelection={setSelection} onSessionChanged={onSessionChanged} onRefresh={refresh}
+          onSuccess={(message) => { setSelected(null); onSuccess(message); refresh() }} />
+        {count ? <ExpenseRows list={list} context={context} selection={rowSelection} /> : (
           <div className="notice">
             <h3>No matching expenses</h3>
             <p>Try changing the month or clearing your filters.</p>
             <Button asChild variant="outline"><a href={urls.expenses}>Reset filters</a></Button>
           </div>
         )}
-        <Pagination path={urls.expenses} list={list} />
+        <Pagination path={urls.expenses} list={list} navigate={navigate} />
       </section>
       <TopExpenses rows={list.top_expenses} />
     </div>
