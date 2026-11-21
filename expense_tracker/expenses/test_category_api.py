@@ -231,19 +231,17 @@ def test_category_writes_require_csrf_and_reject_an_expired_session(
 
 
 @pytest.mark.parametrize(
-    ("local", "debug", "legacy", "candidate", "react"),
-    [(True, True, False, True, True), (True, True, False, False, False),
-     (True, True, True, True, False), (False, True, False, True, False),
-     (True, False, False, True, False)],
-    ids=["candidate", "default", "fallback", "plain-django", "debug-disabled"],
+    ("local", "debug", "legacy", "react"),
+    [(True, True, False, True), (True, True, True, False),
+     (False, True, False, False), (True, False, False, False)],
+    ids=["default", "fallback", "plain-django", "debug-disabled"],
 )
 def test_only_explicit_category_crud_pages_migrate(
-    account_client, accounts, make_category, settings, local, debug, legacy, candidate, react
+    account_client, accounts, make_category, settings, local, debug, legacy, react
 ):
     settings.LOCAL_REACT_DEV = local
     settings.DEBUG = debug
     settings.LEGACY_PAGES = legacy
-    settings.CATEGORY_REACT_CANDIDATE = candidate
     owned = make_category("Travel")
     foreign = make_category("Private", owner=accounts[1])
     pages = [

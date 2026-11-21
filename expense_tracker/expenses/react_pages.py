@@ -119,8 +119,6 @@ def migrated_page(screen: str, legacy: Callable[..., HttpResponse]):
 
     @wraps(legacy)
     def view(request: HttpRequest, **kwargs) -> HttpResponse:
-        if screen in CATEGORY_SCREENS and not settings.CATEGORY_REACT_CANDIDATE:
-            return legacy(request, **kwargs)
         if settings.DEBUG and settings.LOCAL_REACT_DEV and not settings.LEGACY_PAGES:
             return react_host(request, screen, **kwargs)
         return legacy(request, **kwargs)
