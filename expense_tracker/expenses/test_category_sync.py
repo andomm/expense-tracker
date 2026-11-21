@@ -283,24 +283,20 @@ def test_retained_sync_form_redirects_to_legacy_report(
 
 
 @pytest.mark.parametrize(
-    ("local", "debug", "legacy", "candidate", "react"),
+    ("local", "debug", "legacy", "react"),
     [
-        (True, True, False, True, True),
-        (True, True, False, False, False),
-        (True, True, True, True, False),
-        (False, True, False, True, False),
-        (True, False, False, True, False),
+        (True, True, False, True),
+        (True, True, True, False),
+        (False, True, False, False),
+        (True, False, False, False),
     ],
-    ids=["candidate", "default-legacy", "fallback", "plain-django", "debug-disabled"],
+    ids=["default", "fallback", "plain-django", "debug-disabled"],
 )
-def test_sync_pages_move_together(
-    sync_accounts, settings, local, debug, legacy, candidate, react
-):
+def test_sync_pages_move_together(sync_accounts, settings, local, debug, legacy, react):
     _, _, client, _ = sync_accounts
     settings.LOCAL_REACT_DEV = local
     settings.DEBUG = debug
     settings.LEGACY_PAGES = legacy
-    settings.CATEGORY_SYNC_REACT_CANDIDATE = candidate
     start = client.get(reverse("sync_categories"))
     summary = client.get(reverse("sync_summary"))
     if react:

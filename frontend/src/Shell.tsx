@@ -26,7 +26,7 @@ export type AppConfig = { urls: AppUrls; userId: number } & (
   | { screen: "category-sync" | "category-sync-result"; categorySync: CategorySyncRoutes }
 )
 
-export type CategoryListRoutes = { api: string; addUrl: string; syncUrl: string; syncResultUrl: string | null; notices: string[] }
+export type CategoryListRoutes = { api: string; addUrl: string; syncUrl: string; syncResultUrl: string; notices: string[] }
 export type CategoryActionRoutes = { readApi: string; writeApi: string }
 export type CategorySyncRoutes = { startUrl: string; resultUrl: string; startApi: string; latestApi: string }
 

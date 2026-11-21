@@ -1,10 +1,10 @@
 import { ChevronRight, Pencil, Plus, RefreshCw, Tags, Trash2 } from "lucide-react"
-import { useEffect, useRef, useState, type FormEvent } from "react"
+import { useState } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { useRead, type Session } from "@/lib/api"
+import { useRead } from "@/lib/api"
 import { ReadFailure, SignInNotice, type CategoryListRoutes } from "@/Shell"
 
 type CategoryEntry = {
@@ -66,22 +66,7 @@ function CategoryBranch({ entry, tree }: { entry: CategoryEntry; tree: Tree }) {
   )
 }
 
-function SyncCard({ url, resultUrl, token }: { url: string; resultUrl: string | null; token: string }) {
-  const submitted = useRef(false)
-  const [pending, setPending] = useState(false)
-  useEffect(() => {
-    const reset = () => { submitted.current = false; setPending(false) }
-    window.addEventListener("pageshow", reset)
-    return () => window.removeEventListener("pageshow", reset)
-  }, [])
-  function submit(event: FormEvent<HTMLFormElement>) {
-    if (submitted.current) {
-      event.preventDefault()
-      return
-    }
-    submitted.current = true
-    setPending(true)
-  }
+function SyncCard({ url, resultUrl }: { url: string; resultUrl: string }) {
   return (
     <Card className="gap-3 py-4 shadow-none sm:py-5" role="region" aria-labelledby="sync-title">
       <CardHeader className="gap-2 px-4 sm:px-5">
@@ -92,25 +77,17 @@ function SyncCard({ url, resultUrl, token }: { url: string; resultUrl: string | 
         </p>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 sm:px-5">
-        {resultUrl ? <>
-          <Button asChild variant="outline" className="h-11">
-            <a href={url} aria-describedby="sync-scope"><RefreshCw aria-hidden="true" /> Sync existing expenses</a>
-          </Button>
-          <Button asChild variant="link" className="h-11 px-1"><a href={resultUrl}>View latest result</a></Button>
-        </> : <form action={url} method="post" onSubmit={submit}>
-          <input type="hidden" name="csrfmiddlewaretoken" value={token} />
-          <Button type="submit" variant="outline" className="h-11 max-w-full" disabled={pending}
-            aria-describedby="sync-scope">
-            <RefreshCw aria-hidden="true" /> {pending ? "Syncing…" : "Sync existing expenses"}
-          </Button>
-        </form>}
+        <Button asChild variant="outline" className="h-11">
+          <a href={url} aria-describedby="sync-scope"><RefreshCw aria-hidden="true" /> Sync existing expenses</a>
+        </Button>
+        <Button asChild variant="link" className="h-11 px-1"><a href={resultUrl}>View latest result</a></Button>
       </CardContent>
     </Card>
   )
 }
 
-export function CategoriesPage({ routes, login, userId, session }: {
-  routes: CategoryListRoutes; login: string; userId: number; session: Session
+export function CategoriesPage({ routes, login, userId }: {
+  routes: CategoryListRoutes; login: string; userId: number
 }) {
   const { result, retry } = useRead<{ categories: CategoryEntry[] }>(routes.api, userId)
   if (result.state === "loading") return <LoadingCategories />
@@ -142,7 +119,7 @@ export function CategoriesPage({ routes, login, userId, session }: {
           {roots.map((root) => <CategoryBranch key={root.id} entry={root} tree={tree} />)}
         </ul> : <p className="p-4 text-sm text-muted-foreground sm:p-5">No categories yet. Add a category to get started.</p>}
       </section>
-      <SyncCard url={routes.syncUrl} resultUrl={routes.syncResultUrl} token={session.csrf_token} />
+      <SyncCard url={routes.syncUrl} resultUrl={routes.syncResultUrl} />
     </div>
   )
 }

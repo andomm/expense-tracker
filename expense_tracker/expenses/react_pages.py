@@ -63,7 +63,7 @@ def react_host(
             "api": reverse("api:categories"),
             "addUrl": reverse("category_add"),
             "syncUrl": reverse("sync_categories"),
-            "syncResultUrl": reverse("sync_summary") if settings.CATEGORY_SYNC_REACT_CANDIDATE else None,
+            "syncResultUrl": reverse("sync_summary"),
             "notices": [str(message) for message in get_messages(request)],
         }
     elif screen in SYNC_SCREENS:
@@ -130,10 +130,7 @@ def migrated_page(screen: str, legacy: Callable[..., HttpResponse]):
 
     @wraps(legacy)
     def view(request: HttpRequest, **kwargs) -> HttpResponse:
-        if (
-            settings.DEBUG and settings.LOCAL_REACT_DEV and not settings.LEGACY_PAGES
-            and (screen not in SYNC_SCREENS or settings.CATEGORY_SYNC_REACT_CANDIDATE)
-        ):
+        if settings.DEBUG and settings.LOCAL_REACT_DEV and not settings.LEGACY_PAGES:
             return react_host(request, screen, **kwargs)
         return legacy(request, **kwargs)
 

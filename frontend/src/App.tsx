@@ -36,8 +36,7 @@ function SignedInApp({ config, initialSession }: { config: AppConfig; initialSes
   } else if (config.screen === "expenses") {
     content = <ExpensesPage urls={config.urls} notices={config.notices} userId={config.userId} />
   } else if ("categoryList" in config) {
-    content = <CategoriesPage routes={config.categoryList} login={config.urls.login}
-      userId={config.userId} session={session} />
+    content = <CategoriesPage routes={config.categoryList} login={config.urls.login} userId={config.userId} />
   } else if ("categoryAction" in config) {
     content = <CategoryActionPage routes={config.categoryAction} screen={config.screen} urls={config.urls}
       userId={config.userId} session={session} onSessionChange={setSession} />
