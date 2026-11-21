@@ -41,7 +41,22 @@ export function readJson<T>(url: string, signal?: AbortSignal, userId?: number):
   return requestJson<T>(url, { headers, signal })
 }
 
+function writeHeaders(csrfToken: string, userId: number) {
+  return { Accept: "application/json", "X-CSRFToken": csrfToken, "X-Expense-Pilot-User": String(userId) }
+}
+
 // One attempt only. Callers decide how to handle session changes and uncertain outcomes.
+export function writeMultipart<T>(url: string, options: {
+  body: FormData; csrfToken: string; userId: number; signal?: AbortSignal
+}): Promise<T> {
+  return requestJson<T>(url, {
+    method: "POST",
+    signal: options.signal,
+    headers: writeHeaders(options.csrfToken, options.userId),
+    body: options.body,
+  })
+}
+
 export function writeJson<T>(url: string, options: {
   csrfToken: string; userId: number; signal?: AbortSignal
 } & ({ method: "POST" | "PUT"; body: object } | { method: "DELETE"; body?: never })): Promise<T> {
@@ -49,10 +64,8 @@ export function writeJson<T>(url: string, options: {
     method: options.method,
     signal: options.signal,
     headers: {
-      Accept: "application/json",
+      ...writeHeaders(options.csrfToken, options.userId),
       ...(options.body && { "Content-Type": "application/json" }),
-      "X-CSRFToken": options.csrfToken,
-      "X-Expense-Pilot-User": String(options.userId),
     },
     body: JSON.stringify(options.body),
   })

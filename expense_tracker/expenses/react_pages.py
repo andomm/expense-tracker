@@ -26,7 +26,10 @@ TITLES = {
     "category-delete": "Delete category",
     "category-sync": "Sync existing expenses",
     "category-sync-result": "Category sync results",
+    "csv-upload": "Upload CSV",
+    "csv-import-result": "CSV import results",
 }
+IMPORT_SCREENS = {"csv-upload", "csv-import-result"}
 SYNC_SCREENS = {"category-sync", "category-sync-result"}
 CATEGORY_SCREENS = {"categories", "category-add", "category-edit", "category-delete"}
 
@@ -72,6 +75,12 @@ def react_host(
             "resultUrl": reverse("sync_summary"),
             "startApi": reverse("api:category-sync"),
             "latestApi": reverse("api:category-sync-latest"),
+        }
+    elif screen in IMPORT_SCREENS:
+        app["csvImport"] = {
+            "resultUrl": reverse("import_summary"),
+            "startApi": reverse("api:import-start"),
+            "latestApi": reverse("api:import-latest"),
         }
     elif screen in CATEGORY_SCREENS:
         detail = reverse("api:category-detail", args=[pk]) if pk is not None else None
@@ -131,7 +140,8 @@ def migrated_page(screen: str, legacy: Callable[..., HttpResponse]):
     @wraps(legacy)
     def view(request: HttpRequest, **kwargs) -> HttpResponse:
         if settings.DEBUG and settings.LOCAL_REACT_DEV and not settings.LEGACY_PAGES:
-            return react_host(request, screen, **kwargs)
+            if screen not in IMPORT_SCREENS or settings.CSV_IMPORT_REACT_CANDIDATE:
+                return react_host(request, screen, **kwargs)
         return legacy(request, **kwargs)
 
     return view

@@ -15,11 +15,18 @@ class MalformedRequest(ValueError):
 
 
 def api_error(
-    code: str, message: str, status: int, *, fields: dict[str, list[str]] | None = None
+    code: str,
+    message: str,
+    status: int,
+    *,
+    fields: dict[str, list[str]] | None = None,
+    row: int | None = None,
 ) -> JsonResponse:
     body = {"code": code, "message": message}
     if fields:
         body["fields"] = fields
+    if row is not None:
+        body["row"] = row
     return JsonResponse(body, status=status)
 
 

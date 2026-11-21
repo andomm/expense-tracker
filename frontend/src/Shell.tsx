@@ -24,11 +24,13 @@ export type AppConfig = { urls: AppUrls; userId: number } & (
   | { screen: "categories"; categoryList: CategoryListRoutes }
   | { screen: "category-add" | "category-edit" | "category-delete"; categoryAction: CategoryActionRoutes }
   | { screen: "category-sync" | "category-sync-result"; categorySync: CategorySyncRoutes }
+  | { screen: "csv-upload" | "csv-import-result"; csvImport: CsvImportRoutes }
 )
 
 export type CategoryListRoutes = { api: string; addUrl: string; syncUrl: string; syncResultUrl: string; notices: string[] }
 export type CategoryActionRoutes = { readApi: string; writeApi: string }
 export type CategorySyncRoutes = { startUrl: string; resultUrl: string; startApi: string; latestApi: string }
+export type CsvImportRoutes = { resultUrl: string; startApi: string; latestApi: string }
 
 const titles = {
   expenses: "Expenses",
@@ -42,6 +44,8 @@ const titles = {
   "category-delete": "Delete category",
   "category-sync": "Sync existing expenses",
   "category-sync-result": "Category sync results",
+  "csv-upload": "Upload CSV",
+  "csv-import-result": "CSV import results",
 }
 
 export function signInHref(login: string) {
@@ -78,7 +82,8 @@ export function Shell({ config, session, children }: {
           </a>
           <nav aria-label="Main navigation">
             {links.map(({ label, route, icon: Icon }) => (
-              <a key={route} href={config.urls[route]} aria-current={config.screen === route ? "page" : undefined}>
+              <a key={route} href={config.urls[route]}
+                aria-current={config.screen === route || (route === "upload" && "csvImport" in config) ? "page" : undefined}>
                 <Icon className="hidden sm:block" size={16} aria-hidden="true" />
                 {label}
               </a>
@@ -111,13 +116,15 @@ export function Shell({ config, session, children }: {
   )
 }
 
-export function SignInNotice({ login, form = false, deletion = false, categories = false, sync = false }: {
-  login: string; form?: boolean; deletion?: boolean; categories?: boolean; sync?: boolean
+export function SignInNotice({ login, form = false, deletion = false, categories = false, sync = false, csvImport = false }: {
+  login: string; form?: boolean; deletion?: boolean; categories?: boolean; sync?: boolean; csvImport?: boolean
 }) {
   return (
     <div className="notice" role="alert">
-      <h2>{sync ? "Sign in to use category sync" : `Sign in to see your ${categories ? "categories" : "expenses"}`}</h2>
-      <p>{sync
+      <h2>{csvImport ? "Sign in to use CSV import" : sync ? "Sign in to use category sync" : `Sign in to see your ${categories ? "categories" : "expenses"}`}</h2>
+      <p>{csvImport
+        ? "Your session ended or changed. Sign in to reopen this page. No file will be uploaded automatically."
+        : sync
         ? "Your session ended or changed. Sign in to reopen this page. Sync will not start automatically."
         : deletion
         ? "Your session ended or changed. Sign in to review the deletion again. Nothing will be sent automatically."

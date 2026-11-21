@@ -10,15 +10,15 @@ from django.db import models
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
-
-from .importers import get_importer
+from django.views.decorators.http import require_http_methods, require_safe
 
 from .allocations import build_yearly_spending_summary
 from .category_sync import latest_category_sync, record_category_sync
 from .category_tree import category_groups
+from .csv_import import latest_import, record_import
 from .expense_list import ExpenseFilters, month_key, picker_years, read_expense_list, shift_month
 from .expense_save import save_expense, validate_expense
-from .helpers import categorize_from_sources
+from .importers import CSVError
 
 from .forms import (
     BulkCategoryUpdateForm,
@@ -363,64 +363,21 @@ def expense_delete_all(request):
 
 
 @login_required
+@never_cache
+@require_http_methods(["GET", "HEAD", "POST"])
 def upload_csv(request):
-    if request.method == "POST":
-        form = CSVUploadForm(request.POST, request.FILES)
-        if form.is_valid():
-            importer = get_importer(form.cleaned_data["import_format"])
-            rows = importer.read_rows(request.FILES["file"])
-
-            total_count = 0
-            categorized_count = 0
-            uncategorized_expenses = []
-
-            for row in rows:
-                parsed = importer.parse_row(row)
-
-                match = categorize_from_sources(
-                    ("receiver", parsed.receiver),
-                    ("description", parsed.description),
-                    ("category", parsed.category),
-                    user=request.user,
-                )
-
-                expense = Expense(
-                    user=request.user,
-                    date=parsed.date,
-                    category=parsed.category,
-                    category_obj=match.category,
-                    description=parsed.description,
-                    amount=parsed.amount,
-                    receiver=parsed.receiver,
-                )
-                expense.save()
-                total_count += 1
-
-                if match.category:
-                    categorized_count += 1
-                else:
-                    uncategorized_expenses.append(
-                        {
-                            "id": expense.pk,
-                            "date": parsed.date,
-                            "receiver": parsed.receiver,
-                            "description": parsed.description,
-                            "amount": str(parsed.amount),
-                        }
-                    )
-
-            request.session["import_results"] = {
-                "total": total_count,
-                "categorized": categorized_count,
-                "uncategorized": total_count - categorized_count,
-                "uncategorized_expenses": uncategorized_expenses[:50],
-            }
-
+    submitted = request.method == "POST"
+    form = CSVUploadForm(request.POST, request.FILES) if submitted else CSVUploadForm()
+    if submitted and form.is_valid():
+        try:
+            record_import(request, **form.cleaned_data)
+        except CSVError as error:
+            form.add_error("file", str(error))
+        else:
             return redirect("import_summary")
-    else:
-        form = CSVUploadForm()
-
-    return render(request, "expenses/upload_csv.html", {"form": form})
+    return render(
+        request, "expenses/upload_csv.html", {"form": form}, status=422 if submitted else 200
+    )
 
 
 @login_required
@@ -520,34 +477,10 @@ def category_delete(request, pk):
 
 
 @login_required
+@never_cache
+@require_safe
 def import_summary(request):
-    """Display import results with categorization summary."""
-    import_results = request.session.get(
-        "import_results",
-        {
-            "total": 0,
-            "categorized": 0,
-            "uncategorized": 0,
-            "uncategorized_expenses": [],
-        },
-    )
-    shown_uncategorized = len(import_results.get("uncategorized_expenses", []))
-    extra_uncategorized = max(
-        0, import_results.get("uncategorized", 0) - shown_uncategorized
-    )
-
-    # Clear from session after display
-    if "import_results" in request.session:
-        del request.session["import_results"]
-
-    return render(
-        request,
-        "expenses/import_summary.html",
-        {
-            "import_results": import_results,
-            "extra_uncategorized": extra_uncategorized,
-        },
-    )
+    return render(request, "expenses/import_summary.html", {"result": latest_import(request)})
 
 
 @login_required

@@ -26,8 +26,12 @@ urlpatterns = [
         migrated_page("expense-delete-all", views.expense_delete_all),
         name="expense_delete_all",
     ),
-    path("upload/", views.upload_csv, name="upload_csv"),
-    path('upload/summary/', views.import_summary, name='import_summary'),
+    path("upload/", migrated_page("csv-upload", views.upload_csv), name="upload_csv"),
+    path(
+        "upload/summary/",
+        migrated_page("csv-import-result", views.import_summary),
+        name="import_summary",
+    ),
     path('expenses-per-month/', views.expenses_per_month, name='expenses_per_month'),
     path("categories/", migrated_page("categories", views.category_list), name="category_list"),
     path(

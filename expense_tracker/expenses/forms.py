@@ -384,9 +384,13 @@ class CSVUploadForm(forms.Form):
         (IMPORT_FORMAT_SPIIR, "Spiir"),
     ]
 
-    file = forms.FileField(label="Select a CSV file")
+    file = forms.FileField(
+        label="Select a CSV file",
+        widget=forms.ClearableFileInput(attrs={"accept": ".csv,text/csv"}),
+    )
     import_format = forms.ChoiceField(
         choices=IMPORT_FORMAT_CHOICES,
         label="File format",
         initial=IMPORT_FORMAT_FINNISH_BANK,
+        error_messages={"invalid_choice": "Choose OP or Spiir."},
     )

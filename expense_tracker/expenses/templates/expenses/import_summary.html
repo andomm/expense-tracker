@@ -1,62 +1,56 @@
 {% extends 'base.html' %}
 
-{% block title %}Import Summary{% endblock %}
+{% block title %}CSV import results{% endblock %}
 
 {% block content %}
-<h1>CSV Import Results</h1>
+<h1>CSV import results</h1>
 
 <div class="import-summary">
-    <div class="summary-stats">
-        <p><strong>Total Expenses Imported:</strong> {{ import_results.total }}</p>
-        <p><strong>Categorized:</strong> <span class="summary-success">{{ import_results.categorized }}</span></p>
-        <p><strong>Uncategorized:</strong> <span class="summary-warning">{{ import_results.uncategorized }}</span></p>
-        
-        {% if import_results.uncategorized > 0 %}
-            <p class="info-text">
-                {{ import_results.uncategorized }} expense{{ import_results.uncategorized|pluralize }} could not be automatically categorized.
-                You can add keywords to your categories to improve matching, or manually assign categories to these expenses.
-            </p>
-        {% else %}
-            <p class="summary-success-text">✓ All expenses were successfully categorized!</p>
-        {% endif %}
-    </div>
-
-    {% if import_results.uncategorized_expenses %}
-        <div class="uncategorized-list">
-            <h2>Uncategorized Expenses</h2>
-            <p class="text-muted">Click an expense to open it in the edit view.</p>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Receiver</th>
-                        <th>Description</th>
-                        <th>Amount</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for expense in import_results.uncategorized_expenses %}
-                        <tr>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.date }}</a></td>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.receiver }}</a></td>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.description }}</a></td>
-                            <td><a href="{% url 'expense_edit' expense.id %}">{{ expense.amount }}</a></td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            
-            {% if extra_uncategorized > 0 %}
-                <p class="text-muted">
-                    ... and {{ extra_uncategorized }} more uncategorized expenses
-                </p>
-            {% endif %}
+    {% if result %}
+        <div class="summary-stats">
+            <p>Latest successful import in this session.</p>
+            <p><strong>Total expenses imported:</strong> {{ result.counts.total }}</p>
+            <p><strong>Categorized:</strong> <span class="summary-success">{{ result.counts.categorized }}</span></p>
+            <p><strong>Uncategorized:</strong> <span class="summary-warning">{{ result.counts.uncategorized }}</span></p>
         </div>
+        {% with preview=result.uncategorized_preview %}
+            {% if preview.rows %}
+                <div class="uncategorized-list">
+                    <h2>Uncategorized expenses</h2>
+                    <p class="text-muted">These expenses were uncategorized at import time.</p>
+                    <table>
+                        <thead>
+                            <tr><th>Date</th><th>Receiver</th><th>Description</th><th>Amount</th><th>Action</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for expense in preview.rows %}
+                                <tr>
+                                    <td>{{ expense.date }}</td>
+                                    <td>{{ expense.receiver }}</td>
+                                    <td>{{ expense.description }}</td>
+                                    <td>{{ expense.amount }}</td>
+                                    <td>{% if expense.edit_url %}<a href="{{ expense.edit_url }}">Edit expense</a>{% else %}No longer available{% endif %}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% if preview.omitted %}
+                        <p class="text-muted">Showing {{ preview.rows|length }} of {{ result.counts.uncategorized }} expenses. {{ preview.omitted }} more not shown.</p>
+                    {% endif %}
+                </div>
+            {% else %}
+                <p class="summary-success-text">All imported expenses were categorized.</p>
+            {% endif %}
+        {% endwith %}
+    {% else %}
+        <h2>No import result in this session</h2>
+        <p>After a successful upload, its results will appear here.</p>
     {% endif %}
 
     <div class="action-buttons">
-        <a href="{% url 'expense_list' %}" class="btn btn-primary">View Expenses</a>
-        <a href="{% url 'category_list' %}" class="btn btn-secondary">Manage Categories & Keywords</a>
+        <a href="{% url 'expense_list' %}?month=all" class="btn btn-primary">View Expenses</a>
+        <a href="{% url 'category_list' %}" class="btn btn-secondary">Manage Categories</a>
+        <a href="{% url 'upload_csv' %}" class="btn btn-secondary">Upload CSV</a>
     </div>
 </div>
 {% endblock %}

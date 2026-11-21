@@ -6,6 +6,8 @@ import { CategorySyncPage, CategorySyncResultPage, LoadingSync } from "./categor
 import { ExpenseDeletePage, LoadingExpenseDeletion } from "./expenses/ExpenseDeletePage"
 import { ExpenseFormPage, LoadingExpenseForm } from "./expenses/ExpenseFormPage"
 import { ExpensesPage, LoadingExpenses } from "./expenses/ExpensesPage"
+import { ImportResultPage } from "./imports/ImportResultPage"
+import { LoadingImport, UploadPage } from "./imports/UploadPage"
 import { ReadFailure, Shell, SignInNotice, type AppConfig } from "./Shell"
 import { readJson, useRead, type Session } from "./lib/api"
 
@@ -45,6 +47,11 @@ function SignedInApp({ config, initialSession }: { config: AppConfig; initialSes
       <CategorySyncPage routes={config.categorySync} urls={config.urls} userId={config.userId}
         session={session} onSessionChange={setSession} /> :
       <CategorySyncResultPage routes={config.categorySync} urls={config.urls} userId={config.userId} />
+  } else if ("csvImport" in config) {
+    content = config.screen === "csv-upload" ?
+      <UploadPage routes={config.csvImport} urls={config.urls} userId={config.userId}
+        session={session} onSessionChange={setSession} /> :
+      <ImportResultPage routes={config.csvImport} urls={config.urls} userId={config.userId} />
   } else if ("deletion" in config) {
     content = <ExpenseDeletePage routes={config.deletion} allExpenses={config.screen === "expense-delete-all"}
       urls={config.urls} userId={config.userId} session={session} onSessionChange={setSession} />
@@ -60,6 +67,7 @@ function ScreenSignIn({ config }: { config: AppConfig }) {
   return <SignInNotice login={config.urls.login}
     categories={"categoryList" in config || "categoryAction" in config}
     sync={"categorySync" in config}
+    csvImport={"csvImport" in config}
     form={"form" in config || ("categoryAction" in config && config.screen !== "category-delete")}
     deletion={"deletion" in config || config.screen === "category-delete"} />
 }
@@ -68,10 +76,13 @@ export function App({ config }: { config: AppConfig }) {
   const { result, retry } = useRead<Session>(config.urls.sessionApi)
   const categories = "categoryList" in config || "categoryAction" in config
   const sync = "categorySync" in config
+  const csvImport = "csvImport" in config
   const loading = sync ? <LoadingSync result={config.screen === "category-sync-result"} /> :
+    csvImport ? <LoadingImport result={config.screen === "csv-import-result"} /> :
     categories ? <LoadingCategories /> : "deletion" in config ? <LoadingExpenseDeletion /> :
     "form" in config ? <LoadingExpenseForm /> : <LoadingExpenses />
   const errorTitle = sync ? "Could not open category sync" :
+    csvImport ? "Could not open CSV import" :
     categories ? "Could not open Categories" : "deletion" in config ? "Could not open the confirmation" :
     "form" in config ? "Could not open the expense form" : undefined
   if (result.state === "ready" && result.data.user?.id === config.userId) {

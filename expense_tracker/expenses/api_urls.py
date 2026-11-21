@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import api, category_api, category_sync_api, expense_api
+from . import api, category_api, category_sync_api, csv_import_api, expense_api
 from . import expense_bulk_api as bulk
 
 app_name = "api"
@@ -11,6 +11,8 @@ urlpatterns = [
     path("categories/<int:pk>/", category_api.category_detail, name="category-detail"),
     path("categories/sync/", category_sync_api.start, name="category-sync"),
     path("categories/sync/latest-result/", category_sync_api.latest, name="category-sync-latest"),
+    path("imports/", csv_import_api.start, name="import-start"),
+    path("imports/latest-result/", csv_import_api.latest, name="import-latest"),
     path("expenses/", api.expense_list, name="expenses"),
     path(
         "expenses/form-options/",
