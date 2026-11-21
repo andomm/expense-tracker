@@ -23,10 +23,12 @@ export type AppConfig = { urls: AppUrls; userId: number } & (
   | { screen: "expense-delete" | "expense-delete-all"; deletion: DeletionRoutes }
   | { screen: "categories"; categoryList: CategoryListRoutes }
   | { screen: "category-add" | "category-edit" | "category-delete"; categoryAction: CategoryActionRoutes }
+  | { screen: "category-sync" | "category-sync-result"; categorySync: CategorySyncRoutes }
 )
 
-export type CategoryListRoutes = { api: string; addUrl: string; syncUrl: string; notices: string[] }
+export type CategoryListRoutes = { api: string; addUrl: string; syncUrl: string; syncResultUrl: string | null; notices: string[] }
 export type CategoryActionRoutes = { readApi: string; writeApi: string }
+export type CategorySyncRoutes = { startUrl: string; resultUrl: string; startApi: string; latestApi: string }
 
 const titles = {
   expenses: "Expenses",
@@ -38,6 +40,8 @@ const titles = {
   "category-add": "Add category",
   "category-edit": "Edit category",
   "category-delete": "Delete category",
+  "category-sync": "Sync existing expenses",
+  "category-sync-result": "Category sync results",
 }
 
 export function signInHref(login: string) {
@@ -107,13 +111,15 @@ export function Shell({ config, session, children }: {
   )
 }
 
-export function SignInNotice({ login, form = false, deletion = false, categories = false }: {
-  login: string; form?: boolean; deletion?: boolean; categories?: boolean
+export function SignInNotice({ login, form = false, deletion = false, categories = false, sync = false }: {
+  login: string; form?: boolean; deletion?: boolean; categories?: boolean; sync?: boolean
 }) {
   return (
     <div className="notice" role="alert">
-      <h2>Sign in to see your {categories ? "categories" : "expenses"}</h2>
-      <p>{deletion
+      <h2>{sync ? "Sign in to use category sync" : `Sign in to see your ${categories ? "categories" : "expenses"}`}</h2>
+      <p>{sync
+        ? "Your session ended or changed. Sign in to reopen this page. Sync will not start automatically."
+        : deletion
         ? "Your session ended or changed. Sign in to review the deletion again. Nothing will be sent automatically."
         : form
         ? "Your session ended or changed. Sign in again to reopen this page. Unsaved changes will not be restored or sent."

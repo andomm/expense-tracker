@@ -30,8 +30,16 @@ urlpatterns = [
     path('upload/summary/', views.import_summary, name='import_summary'),
     path('expenses-per-month/', views.expenses_per_month, name='expenses_per_month'),
     path("categories/", migrated_page("categories", views.category_list), name="category_list"),
-    path("categories/sync/", views.sync_categories, name="sync_categories"),
-    path("categories/sync/summary/", views.sync_summary, name="sync_summary"),
+    path(
+        "categories/sync/",
+        migrated_page("category-sync", views.sync_categories),
+        name="sync_categories",
+    ),
+    path(
+        "categories/sync/summary/",
+        migrated_page("category-sync-result", views.sync_summary),
+        name="sync_summary",
+    ),
     path(
         "categories/add/",
         migrated_page("category-add", views.category_add),

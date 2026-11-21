@@ -257,5 +257,3 @@ def test_only_explicit_category_crud_pages_migrate(
             assert response.context["app"]["screen"] == screen
     for path_name in ("category_edit", "category_delete"):
         assert account_client.get(reverse(path_name, args=[foreign.pk])).status_code == 404
-    assert account_client.get(reverse("sync_categories")).url == reverse("category_list")
-    assert account_client.get(reverse("sync_summary")).templates[0].name == "expenses/sync_summary.html"

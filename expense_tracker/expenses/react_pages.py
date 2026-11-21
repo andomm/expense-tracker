@@ -24,7 +24,10 @@ TITLES = {
     "category-add": "Add category",
     "category-edit": "Edit category",
     "category-delete": "Delete category",
+    "category-sync": "Sync existing expenses",
+    "category-sync-result": "Category sync results",
 }
+SYNC_SCREENS = {"category-sync", "category-sync-result"}
 CATEGORY_SCREENS = {"categories", "category-add", "category-edit", "category-delete"}
 
 
@@ -60,7 +63,15 @@ def react_host(
             "api": reverse("api:categories"),
             "addUrl": reverse("category_add"),
             "syncUrl": reverse("sync_categories"),
+            "syncResultUrl": reverse("sync_summary") if settings.CATEGORY_SYNC_REACT_CANDIDATE else None,
             "notices": [str(message) for message in get_messages(request)],
+        }
+    elif screen in SYNC_SCREENS:
+        app["categorySync"] = {
+            "startUrl": reverse("sync_categories"),
+            "resultUrl": reverse("sync_summary"),
+            "startApi": reverse("api:category-sync"),
+            "latestApi": reverse("api:category-sync-latest"),
         }
     elif screen in CATEGORY_SCREENS:
         detail = reverse("api:category-detail", args=[pk]) if pk is not None else None
@@ -119,7 +130,10 @@ def migrated_page(screen: str, legacy: Callable[..., HttpResponse]):
 
     @wraps(legacy)
     def view(request: HttpRequest, **kwargs) -> HttpResponse:
-        if settings.DEBUG and settings.LOCAL_REACT_DEV and not settings.LEGACY_PAGES:
+        if (
+            settings.DEBUG and settings.LOCAL_REACT_DEV and not settings.LEGACY_PAGES
+            and (screen not in SYNC_SCREENS or settings.CATEGORY_SYNC_REACT_CANDIDATE)
+        ):
             return react_host(request, screen, **kwargs)
         return legacy(request, **kwargs)
 

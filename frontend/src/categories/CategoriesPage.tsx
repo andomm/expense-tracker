@@ -66,7 +66,7 @@ function CategoryBranch({ entry, tree }: { entry: CategoryEntry; tree: Tree }) {
   )
 }
 
-function SyncCard({ url, token }: { url: string; token: string }) {
+function SyncCard({ url, resultUrl, token }: { url: string; resultUrl: string | null; token: string }) {
   const submitted = useRef(false)
   const [pending, setPending] = useState(false)
   useEffect(() => {
@@ -91,14 +91,19 @@ function SyncCard({ url, token }: { url: string; token: string }) {
           matches to a more specific category within the same top-level category.
         </p>
       </CardHeader>
-      <CardContent className="px-4 sm:px-5">
-        <form action={url} method="post" onSubmit={submit}>
+      <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 sm:px-5">
+        {resultUrl ? <>
+          <Button asChild variant="outline" className="h-11">
+            <a href={url} aria-describedby="sync-scope"><RefreshCw aria-hidden="true" /> Sync existing expenses</a>
+          </Button>
+          <Button asChild variant="link" className="h-11 px-1"><a href={resultUrl}>View latest result</a></Button>
+        </> : <form action={url} method="post" onSubmit={submit}>
           <input type="hidden" name="csrfmiddlewaretoken" value={token} />
           <Button type="submit" variant="outline" className="h-11 max-w-full" disabled={pending}
             aria-describedby="sync-scope">
             <RefreshCw aria-hidden="true" /> {pending ? "Syncing…" : "Sync existing expenses"}
           </Button>
-        </form>
+        </form>}
       </CardContent>
     </Card>
   )
@@ -137,7 +142,7 @@ export function CategoriesPage({ routes, login, userId, session }: {
           {roots.map((root) => <CategoryBranch key={root.id} entry={root} tree={tree} />)}
         </ul> : <p className="p-4 text-sm text-muted-foreground sm:p-5">No categories yet. Add a category to get started.</p>}
       </section>
-      <SyncCard url={routes.syncUrl} token={session.csrf_token} />
+      <SyncCard url={routes.syncUrl} resultUrl={routes.syncResultUrl} token={session.csrf_token} />
     </div>
   )
 }

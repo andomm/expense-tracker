@@ -9,10 +9,12 @@ from django.contrib.auth.forms import UserCreationForm
 from django.db import models
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.views.decorators.cache import never_cache
 
 from .importers import get_importer
 
 from .allocations import build_yearly_spending_summary
+from .category_sync import latest_category_sync, record_category_sync
 from .category_tree import category_groups
 from .expense_list import ExpenseFilters, month_key, picker_years, read_expense_list, shift_month
 from .expense_save import save_expense, validate_expense
@@ -35,8 +37,6 @@ from expenses.charts import (
     create_income_vs_expenses,
     create_monthly_comparison,
 )
-
-PREVIEW_LIMIT = 50
 
 @login_required
 def expenses_per_month(request):
@@ -444,134 +444,6 @@ def category_list(request):
         {"category_groups": category_groups(request.user)},
     )
 
-#TODO: These sync functions could be moved somewhere else
-def run_category_sync(user):
-    uncategorized_results = sync_uncategorized_expenses(user)
-    upgrade_results = upgrade_categorized_expenses(user)
-    return {**uncategorized_results, **upgrade_results}
-
-
-def sync_uncategorized_expenses(user):
-    uncategorized_expenses = Expense.objects.filter(
-        user=user, category_obj__isnull=True
-    )
-    total_uncategorized = uncategorized_expenses.count()
-    updated_count = 0
-    updated_expenses = []
-    still_uncategorized = []
-
-    for expense in uncategorized_expenses.iterator():
-        match = categorize_from_sources(
-            ("receiver", expense.receiver),
-            ("description", expense.description),
-            ("category", expense.category),
-            user=user,
-        )
-
-        if match.category:
-            expense.category_obj = match.category
-            expense.category = match.category.name
-            expense.save(update_fields=["category_obj", "category"])
-            updated_count += 1
-
-            if len(updated_expenses) < PREVIEW_LIMIT:
-                updated_expenses.append(
-                    {
-                        "id": expense.pk,
-                        "date": expense.date.strftime("%Y-%m-%d"),
-                        "receiver": expense.receiver,
-                        "description": expense.description,
-                        "amount": str(expense.amount),
-                        "category": match.category.name,
-                        "matched_keyword": match.keyword,
-                        "matched_from": match.source,
-                    }
-                )
-
-        elif len(still_uncategorized) < PREVIEW_LIMIT:
-            still_uncategorized.append(
-                {
-                    "id": expense.pk,
-                    "date": expense.date.strftime("%Y-%m-%d"),
-                    "receiver": expense.receiver,
-                    "description": expense.description,
-                    "amount": str(expense.amount),
-                }
-            )
-
-    return {
-        "total_uncategorized_before": total_uncategorized,
-        "updated_count": updated_count,
-        "remaining_uncategorized": total_uncategorized - updated_count,
-        "updated_expenses": updated_expenses,
-        "still_uncategorized": still_uncategorized,
-    }
-
-
-def can_upgrade_category(current, candidate):
-    if candidate.pk == current.pk:
-        return False
-    if candidate.get_depth() <= current.get_depth():
-        return False
-    if candidate.get_root().pk != current.get_root().pk:
-        return False
-    return True
-
-
-def upgrade_categorized_expenses(user):
-    categorized_expenses = Expense.objects.filter(
-        user=user, category_obj__isnull=False
-    ).select_related(
-        "category_obj__parent",
-        "category_obj__parent__parent",
-        "category_obj__parent__parent__parent",
-        "category_obj__parent__parent__parent__parent",
-    )
-
-    upgraded_count = 0
-    upgraded_expenses = []
-
-    for expense in categorized_expenses.iterator():
-        match = categorize_from_sources(
-            ("receiver", expense.receiver),
-            ("description", expense.description),
-            ("category", expense.category),
-            user=user,
-        )
-
-        if not match.category:
-            continue
-
-        current = expense.category_obj
-        candidate = match.category
-
-        if not can_upgrade_category(current, candidate):
-            continue
-
-        old_category_name = current.name
-        expense.category_obj = candidate
-        expense.category = candidate.name
-        expense.save(update_fields=["category_obj", "category"])
-        upgraded_count += 1
-
-        if len(upgraded_expenses) < PREVIEW_LIMIT:
-            upgraded_expenses.append(
-                {
-                    "id": expense.pk,
-                    "date": expense.date.strftime("%Y-%m-%d"),
-                    "receiver": expense.receiver,
-                    "description": expense.description,
-                    "amount": str(expense.amount),
-                    "old_category": old_category_name,
-                    "new_category": candidate.name,
-                    "matched_keyword": match.keyword,
-                }
-            )
-
-    return {
-        "upgraded_count": upgraded_count,
-        "upgraded_expenses": upgraded_expenses,
-    }
 
 @login_required
 def sync_categories(request):
@@ -579,8 +451,9 @@ def sync_categories(request):
         messages.error(request, "Category sync must be started with the sync button.")
         return redirect("category_list")
 
-    request.session["sync_results"] = run_category_sync(request.user)
+    record_category_sync(request)
     return redirect("sync_summary")
+
 
 @login_required
 def category_add(request):
@@ -678,46 +551,30 @@ def import_summary(request):
 
 
 @login_required
+@never_cache
 def sync_summary(request):
-    """Display category sync results with affected expenses."""
-    sync_results = request.session.get(
-        "sync_results",
-        {
-            "total_uncategorized_before": 0,
-            "updated_count": 0,
-            "remaining_uncategorized": 0,
-            "updated_expenses": [],
-            "still_uncategorized": [],
-            "upgraded_count": 0,
-            "upgraded_expenses": [],
-        },
-    )
-    # Back-compat: session data from an older sync won't have these keys
-    sync_results.setdefault("upgraded_count", 0)
-    sync_results.setdefault("upgraded_expenses", [])
-
-    extra_updated = max(
-        0, sync_results["updated_count"] - len(sync_results["updated_expenses"])
-    )
-    extra_remaining = max(
-        0,
-        sync_results["remaining_uncategorized"]
-        - len(sync_results["still_uncategorized"]),
-    )
-    extra_upgraded = max(
-        0, sync_results["upgraded_count"] - len(sync_results["upgraded_expenses"])
-    )
-
-    if "sync_results" in request.session:
-        del request.session["sync_results"]
-
+    """Render the retained Django result page with the shared sync report."""
+    result = latest_category_sync(request) or {"counts": {}, "previews": {}}
+    counts = result["counts"]
+    previews = result["previews"]
+    updated = previews.get("newly_categorized", {})
+    upgraded = previews.get("upgraded", {})
+    remaining = previews.get("still_uncategorized", {})
     return render(
         request,
         "expenses/sync_summary.html",
         {
-            "sync_results": sync_results,
-            "extra_updated": extra_updated,
-            "extra_remaining": extra_remaining,
-            "extra_upgraded": extra_upgraded,
+            "sync_results": {
+                "total_uncategorized_before": counts.get("uncategorized_before", 0),
+                "updated_count": counts.get("newly_categorized", 0),
+                "remaining_uncategorized": counts.get("still_uncategorized", 0),
+                "upgraded_count": counts.get("upgraded", 0),
+                "updated_expenses": updated.get("rows", []),
+                "still_uncategorized": remaining.get("rows", []),
+                "upgraded_expenses": upgraded.get("rows", []),
+            },
+            "extra_updated": updated.get("omitted", 0),
+            "extra_remaining": remaining.get("omitted", 0),
+            "extra_upgraded": upgraded.get("omitted", 0),
         },
     )
