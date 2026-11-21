@@ -1,11 +1,14 @@
 from django.urls import path
 
-from . import api, expense_api
+from . import api, category_api, expense_api
 from . import expense_bulk_api as bulk
 
 app_name = "api"
 urlpatterns = [
     path("session/", api.session_status, name="session"),
+    path("categories/", category_api.categories, name="categories"),
+    path("categories/form-options/", category_api.form_options, name="category-form-options"),
+    path("categories/<int:pk>/", category_api.category_detail, name="category-detail"),
     path("expenses/", api.expense_list, name="expenses"),
     path(
         "expenses/form-options/",

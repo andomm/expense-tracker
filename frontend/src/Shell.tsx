@@ -21,7 +21,12 @@ export type AppConfig = { urls: AppUrls; userId: number } & (
   | { screen: "expenses"; notices: string[] }
   | { screen: "expense-add" | "expense-edit"; form: FormRoutes }
   | { screen: "expense-delete" | "expense-delete-all"; deletion: DeletionRoutes }
+  | { screen: "categories"; categoryList: CategoryListRoutes }
+  | { screen: "category-add" | "category-edit" | "category-delete"; categoryAction: CategoryActionRoutes }
 )
+
+export type CategoryListRoutes = { api: string; addUrl: string; syncUrl: string; notices: string[] }
+export type CategoryActionRoutes = { readApi: string; writeApi: string }
 
 const titles = {
   expenses: "Expenses",
@@ -29,6 +34,10 @@ const titles = {
   "expense-edit": "Edit expense",
   "expense-delete": "Delete expense",
   "expense-delete-all": "Delete all expenses",
+  categories: "Categories",
+  "category-add": "Add category",
+  "category-edit": "Edit category",
+  "category-delete": "Delete category",
 }
 
 export function signInHref(login: string) {
@@ -98,16 +107,18 @@ export function Shell({ config, session, children }: {
   )
 }
 
-export function SignInNotice({ login, form = false, deletion = false }: {
-  login: string; form?: boolean; deletion?: boolean
+export function SignInNotice({ login, form = false, deletion = false, categories = false }: {
+  login: string; form?: boolean; deletion?: boolean; categories?: boolean
 }) {
   return (
     <div className="notice" role="alert">
-      <h2>Sign in to see your expenses</h2>
+      <h2>Sign in to see your {categories ? "categories" : "expenses"}</h2>
       <p>{deletion
         ? "Your session ended or changed. Sign in to review the deletion again. Nothing will be sent automatically."
         : form
         ? "Your session ended or changed. Sign in again to reopen this page. Unsaved changes will not be restored or sent."
+        : categories
+        ? "Your session ended or changed. Sign in again to reopen this page."
         : "Your session ended or changed. Sign in again to return to these filters."}</p>
       <Button asChild><a href={signInHref(login)}>Sign in</a></Button>
     </div>

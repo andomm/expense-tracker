@@ -4,11 +4,12 @@ import { useEffect, useRef, useState, type FormEvent } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { Field, Messages } from "@/components/ui/form-field"
 import { Input } from "@/components/ui/input"
 import { ApiError, readJson, useRead, writeJson, type FieldErrors, type Session } from "@/lib/api"
 import { ReadFailure, SignInNotice, type AppUrls, type FormRoutes } from "@/Shell"
 
-import { ChoiceInput, ExpenseFields, Field, Messages } from "./ExpenseFields"
+import { ChoiceInput, ExpenseFields } from "./ExpenseFields"
 import { emptyDraft, saveFields, useAmountPreview, type Draft, type ExpenseDetail, type FormOptions, type MainFields } from "./form"
 import { euro } from "./read"
 

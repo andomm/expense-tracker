@@ -11,7 +11,21 @@ from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_safe
 
-from .models import Expense
+from .models import Category, Expense
+
+
+TITLES = {
+    "expenses": "Expenses",
+    "expense-add": "Add expense",
+    "expense-edit": "Edit expense",
+    "expense-delete": "Delete expense",
+    "expense-delete-all": "Delete all expenses",
+    "categories": "Categories",
+    "category-add": "Add category",
+    "category-edit": "Edit category",
+    "category-delete": "Delete category",
+}
+CATEGORY_SCREENS = {"categories", "category-add", "category-edit", "category-delete"}
 
 
 @login_required
@@ -20,8 +34,10 @@ from .models import Expense
 def react_host(
     request: HttpRequest, screen: str, pk: int | None = None
 ) -> HttpResponse:
-    if pk is not None and not Expense.objects.filter(user=request.user, pk=pk).exists():
-        raise Http404
+    if pk is not None:
+        model = Category if screen in CATEGORY_SCREENS else Expense
+        if not model.objects.filter(user=request.user, pk=pk).exists():
+            raise Http404
 
     app = {
         "screen": screen,
@@ -39,7 +55,20 @@ def react_host(
             "expensesApi": reverse("api:expenses"),
         },
     }
-    if screen == "expenses":
+    if screen == "categories":
+        app["categoryList"] = {
+            "api": reverse("api:categories"),
+            "addUrl": reverse("category_add"),
+            "syncUrl": reverse("sync_categories"),
+            "notices": [str(message) for message in get_messages(request)],
+        }
+    elif screen in CATEGORY_SCREENS:
+        detail = reverse("api:category-detail", args=[pk]) if pk is not None else None
+        app["categoryAction"] = {
+            "readApi": detail or reverse("api:category-form-options"),
+            "writeApi": detail or reverse("api:categories"),
+        }
+    elif screen == "expenses":
         app["notices"] = [str(message) for message in get_messages(request)]
     elif screen in ("expense-delete", "expense-delete-all"):
         app["deletion"] = {
@@ -68,13 +97,7 @@ def react_host(
         {
             "vite_origin": settings.VITE_DEV_ORIGIN,
             "app": app,
-            "title": {
-                "expenses": "Expenses",
-                "expense-add": "Add expense",
-                "expense-edit": "Edit expense",
-                "expense-delete": "Delete expense",
-                "expense-delete-all": "Delete all expenses",
-            }[screen],
+            "title": TITLES[screen],
         },
     )
 
@@ -96,6 +119,8 @@ def migrated_page(screen: str, legacy: Callable[..., HttpResponse]):
 
     @wraps(legacy)
     def view(request: HttpRequest, **kwargs) -> HttpResponse:
+        if screen in CATEGORY_SCREENS and not settings.CATEGORY_REACT_CANDIDATE:
+            return legacy(request, **kwargs)
         if settings.DEBUG and settings.LOCAL_REACT_DEV and not settings.LEGACY_PAGES:
             return react_host(request, screen, **kwargs)
         return legacy(request, **kwargs)

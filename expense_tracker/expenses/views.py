@@ -13,6 +13,7 @@ from django.urls import reverse
 from .importers import get_importer
 
 from .allocations import build_yearly_spending_summary
+from .category_tree import category_groups
 from .expense_list import ExpenseFilters, month_key, picker_years, read_expense_list, shift_month
 from .expense_save import save_expense, validate_expense
 from .helpers import categorize_from_sources
@@ -437,61 +438,10 @@ def show_expenses_amount(request):
 def category_list(request):
     """List the current user's categories as collapsible groups."""
 
-    def build_category_groups(user) -> list[dict]:
-        """
-        Build a list of category groups for the template.
-        Each group has: parent, parent_keyword_count, parent_keywords_full, children.
-        Children are dicts with: category, depth, keyword_count, keywords_full.
-        """
-        all_cats = list(
-            Category.objects.filter(user=user).select_related(
-                "parent",
-                "parent__parent",
-                "parent__parent__parent",
-                "parent__parent__parent__parent",
-            )
-        )
-
-        by_parent: dict[int | None, list] = {}
-        for cat in all_cats:
-            by_parent.setdefault(cat.parent_id, []).append(cat)
-
-        for children in by_parent.values():
-            children.sort(key=lambda c: c.name.lower())
-
-        groups = []
-        for root in by_parent.get(None, []):
-            children_list = []
-
-            def collect_children(parent, depth):
-                for child in by_parent.get(parent.pk, []):
-                    kw_list = child.get_keywords_list()
-                    children_list.append({
-                        "category": child,
-                        "depth": depth,
-                        "keyword_count": len(kw_list),
-                        "keywords_full": ", ".join(kw_list),
-                    })
-                    collect_children(child, depth + 1)
-
-            collect_children(root, 2)
-
-            all_kw = root.get_all_keywords_list()
-            groups.append({
-                "parent": root,
-                "parent_keyword_count": len(all_kw),
-                "parent_keywords_full": ", ".join(all_kw),
-                "children": children_list,
-            })
-
-        return groups
-
     return render(
         request,
         "expenses/category_list.html",
-        {
-            "category_groups": build_category_groups(request.user),
-        },
+        {"category_groups": category_groups(request.user)},
     )
 
 #TODO: These sync functions could be moved somewhere else

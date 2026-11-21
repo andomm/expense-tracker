@@ -1,3 +1,4 @@
+from collections import defaultdict
 from decimal import Decimal
 
 from django import forms
@@ -285,41 +286,56 @@ class CategoryForm(forms.ModelForm):
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
 
-        all_cats = list(get_user_category_queryset(user))
-
-        # Exclude self and its descendants from parent candidates
-        exclude_id = self.instance.pk if self.instance.pk else None
-        descendant_ids = set(self.instance.get_all_descendant_ids()) if self.instance.pk else set()
-
-        # Only categories that still have room for a child (depth < MAX_CATEGORY_DEPTH)
-        valid_parents = [
-            cat for cat in all_cats
-            if cat.pk not in descendant_ids
-            and (exclude_id is None or cat.pk != exclude_id)
-            and cat.get_depth() < MAX_CATEGORY_DEPTH
-        ]
-
-        self.fields["parent"].queryset = Category.objects.filter(
-            pk__in=[c.pk for c in valid_parents]
+        owned = (
+            Category.objects.filter(user=user)
+            if user and user.is_authenticated
+            else Category.objects.none()
         )
-        self.fields["parent"].choices = [("", "---------")] + [
-            (str(cat.pk), label)
-            for cat, label in [
-                (cat, "— " * (cat.get_depth() - 1) + cat.name)
-                for cat in sorted(valid_parents, key=lambda c: c.name.lower())
-            ]
+        all_categories = list(owned)
+        children: dict[int | None, list[Category]] = defaultdict(list)
+        for category in all_categories:
+            children[category.parent_id].append(category)
+
+        pk = self.instance.pk
+        direct_children = children[pk] if pk is not None else []
+        self.child_types = {child.category_type for child in direct_children}
+        self.subtree_ids = {pk} if pk is not None else set()
+        height = 1
+        stack = [(child, 2) for child in direct_children]
+        while stack:
+            child, level = stack.pop()
+            if child.pk in self.subtree_ids:
+                continue
+            self.subtree_ids.add(child.pk)
+            height = max(height, level)
+            stack.extend((node, level + 1) for node in children[child.pk])
+
+        parents = [
+            (cat, depth)
+            for cat, depth in _flatten_category_tree(all_categories)
+            if cat.pk not in self.subtree_ids and depth + height <= MAX_CATEGORY_DEPTH
+        ]
+        parent_field = self.fields["parent"]
+        parent_field.queryset = owned.filter(pk__in=[cat.pk for cat, _ in parents])
+        parent_field.choices = [("", "---------")] + [
+            (str(cat.pk), "— " * (depth - 1) + cat.name) for cat, depth in parents
         ]
 
-    def clean_parent(self):
-        parent = self.cleaned_data.get("parent")
-        if parent and parent.get_depth() >= MAX_CATEGORY_DEPTH:
-            raise forms.ValidationError(
-                f"The selected parent is at the maximum allowed depth ({MAX_CATEGORY_DEPTH}). "
-                "Choose a shallower category."
-            )
-        return parent
+    def clean_name(self) -> str:
+        name = self.cleaned_data["name"]
+        if Category.objects.filter(user_id=self.instance.user_id, name=name).exclude(
+            pk=self.instance.pk
+        ).exists():
+            raise forms.ValidationError("You already have a category with this name.")
+        return name
 
-    def clean_keywords(self):
+    def clean_category_type(self) -> str:
+        category_type = self.cleaned_data["category_type"]
+        if self.child_types - {category_type}:
+            raise forms.ValidationError("Category type must match its subcategories.")
+        return category_type
+
+    def clean_keywords(self) -> str:
         keywords_raw = self.cleaned_data.get("keywords", "")
         if not keywords_raw or not keywords_raw.strip():
             return keywords_raw
@@ -331,24 +347,13 @@ class CategoryForm(forms.ModelForm):
         if not submitted_keywords:
             return keywords_raw
 
-        user = self.instance.user if self.instance else None
-        if not user:
+        if not self.instance.user_id:
             return keywords_raw
 
-        # Get all categories for this user, excluding self and own descendants
-        exclude_ids = set()
-        if self.instance.pk:
-            exclude_ids.add(self.instance.pk)
-            exclude_ids.update(self.instance.get_all_descendant_ids())
-
-        other_categories = Category.objects.filter(user=user).exclude(
-            pk__in=exclude_ids
-        ).select_related(
-            "parent",
-            "parent__parent",
-            "parent__parent__parent",
-            "parent__parent__parent__parent",
-        )
+        # A parent can keep keywords also used by its own descendants.
+        other_categories = Category.objects.filter(user_id=self.instance.user_id).exclude(
+            pk__in=self.subtree_ids
+        ).only("name", "keywords").order_by("pk")
 
         # Build keyword → category name mapping from all other categories
         keyword_to_category: dict[str, str] = {}

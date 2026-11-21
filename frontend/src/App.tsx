@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react"
 
+import { CategoriesPage, LoadingCategories } from "./categories/CategoriesPage"
+import { CategoryActionPage } from "./categories/CategoryActionPage"
 import { ExpenseDeletePage, LoadingExpenseDeletion } from "./expenses/ExpenseDeletePage"
 import { ExpenseFormPage, LoadingExpenseForm } from "./expenses/ExpenseFormPage"
 import { ExpensesPage, LoadingExpenses } from "./expenses/ExpensesPage"
@@ -32,6 +34,12 @@ function SignedInApp({ config, initialSession }: { config: AppConfig; initialSes
     content = <ScreenSignIn config={config} />
   } else if (config.screen === "expenses") {
     content = <ExpensesPage urls={config.urls} notices={config.notices} userId={config.userId} />
+  } else if ("categoryList" in config) {
+    content = <CategoriesPage routes={config.categoryList} login={config.urls.login}
+      userId={config.userId} session={session} />
+  } else if ("categoryAction" in config) {
+    content = <CategoryActionPage routes={config.categoryAction} screen={config.screen} urls={config.urls}
+      userId={config.userId} session={session} onSessionChange={setSession} />
   } else if ("deletion" in config) {
     content = <ExpenseDeletePage routes={config.deletion} allExpenses={config.screen === "expense-delete-all"}
       urls={config.urls} userId={config.userId} session={session} onSessionChange={setSession} />
@@ -44,14 +52,18 @@ function SignedInApp({ config, initialSession }: { config: AppConfig; initialSes
 }
 
 function ScreenSignIn({ config }: { config: AppConfig }) {
-  return <SignInNotice login={config.urls.login} form={"form" in config} deletion={"deletion" in config} />
+  return <SignInNotice login={config.urls.login}
+    categories={"categoryList" in config || "categoryAction" in config}
+    form={"form" in config || ("categoryAction" in config && config.screen !== "category-delete")}
+    deletion={"deletion" in config || config.screen === "category-delete"} />
 }
 
 export function App({ config }: { config: AppConfig }) {
   const { result, retry } = useRead<Session>(config.urls.sessionApi)
-  const loading = "deletion" in config ? <LoadingExpenseDeletion /> :
+  const categories = "categoryList" in config || "categoryAction" in config
+  const loading = categories ? <LoadingCategories /> : "deletion" in config ? <LoadingExpenseDeletion /> :
     "form" in config ? <LoadingExpenseForm /> : <LoadingExpenses />
-  const errorTitle = "deletion" in config ? "Could not open the confirmation" :
+  const errorTitle = categories ? "Could not open Categories" : "deletion" in config ? "Could not open the confirmation" :
     "form" in config ? "Could not open the expense form" : undefined
   if (result.state === "ready" && result.data.user?.id === config.userId) {
     return <SignedInApp config={config} initialSession={result.data} />

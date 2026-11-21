@@ -29,10 +29,22 @@ urlpatterns = [
     path("upload/", views.upload_csv, name="upload_csv"),
     path('upload/summary/', views.import_summary, name='import_summary'),
     path('expenses-per-month/', views.expenses_per_month, name='expenses_per_month'),
-    path('categories/', views.category_list, name='category_list'),
-    path('categories/sync/', views.sync_categories, name='sync_categories'),
-    path('categories/sync/summary/', views.sync_summary, name='sync_summary'),
-    path('categories/add/', views.category_add, name='category_add'),
-    path('categories/<int:pk>/edit/', views.category_edit, name='category_edit'),
-    path('categories/<int:pk>/delete/', views.category_delete, name='category_delete'),
+    path("categories/", migrated_page("categories", views.category_list), name="category_list"),
+    path("categories/sync/", views.sync_categories, name="sync_categories"),
+    path("categories/sync/summary/", views.sync_summary, name="sync_summary"),
+    path(
+        "categories/add/",
+        migrated_page("category-add", views.category_add),
+        name="category_add",
+    ),
+    path(
+        "categories/<int:pk>/edit/",
+        migrated_page("category-edit", views.category_edit),
+        name="category_edit",
+    ),
+    path(
+        "categories/<int:pk>/delete/",
+        migrated_page("category-delete", views.category_delete),
+        name="category_delete",
+    ),
 ]
