@@ -15,11 +15,11 @@ export type FormRoutes = {
 
 export type DeletionRoutes = { api: string; returnUrl: string }
 
-export type AppUrls = Record<"expenses" | "addExpense" | "analytics" | "categories" | "upload"
+export type AppUrls = Record<"expenses" | "addExpense" | "deleteAllExpenses" | "analytics" | "categories" | "upload"
   | "login" | "logout" | "sessionApi" | "expensesApi", string>
 
 export type AppConfig = { urls: AppUrls; userId: number } & (
-  | { screen: "expenses"; notices: string[]; deleteAllUrl: string }
+  | { screen: "expenses"; notices: string[] }
   | { screen: "expense-add" | "expense-edit"; form: FormRoutes }
   | { screen: "expense-delete" | "expense-delete-all"; deletion: DeletionRoutes }
 )

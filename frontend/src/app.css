@@ -100,7 +100,7 @@
   .month-picker { @apply flex flex-wrap items-center gap-2; }
   .filters label { @apply text-xs font-bold text-muted-foreground; }
   .month-picker label { @apply basis-full sm:basis-auto; }
-  .filter-form { @apply grid grid-cols-1 items-end gap-2 border-t pt-3 min-[360px]:grid-cols-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]; }
+  .filter-form { @apply grid grid-cols-1 items-end gap-2 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]; }
   .filter-form > div { @apply min-w-0; }
   .filter-form label { @apply mb-1 block; }
   .filter-search { @apply col-span-full; }

@@ -29,6 +29,7 @@ def react_host(
         "urls": {
             "expenses": reverse("expense_list"),
             "addExpense": reverse("expense_add"),
+            "deleteAllExpenses": reverse("expense_delete_all"),
             "analytics": reverse("expenses_per_month"),
             "categories": reverse("category_list"),
             "upload": reverse("upload_csv"),
@@ -40,7 +41,6 @@ def react_host(
     }
     if screen == "expenses":
         app["notices"] = [str(message) for message in get_messages(request)]
-        app["deleteAllUrl"] = _list_context_url(request, "expense_delete_all")
     elif screen in ("expense-delete", "expense-delete-all"):
         app["deletion"] = {
             "api": (

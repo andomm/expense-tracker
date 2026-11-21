@@ -259,36 +259,45 @@ function ExpensesResults({ urls, notices, userId, request, navigate, selected, s
     ? `${count} matching expense${count === 0 ? "s" : ""}`
     : `Showing ${firstRow}–${firstRow + list.rows.length - 1} of ${count} expenses`
   return (
-    <div className="ledger">
-      <Balance summary={list.summary} allDates={list.filters.month === "all"} />
-      <section className="activity" aria-labelledby="activity-title">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 id="activity-title" className="mb-0">Activity</h2>
-          <Button asChild><a href={context(urls.addExpense)}><Plus aria-hidden="true" /> Add expense</a></Button>
-        </div>
-        {notices.length > 0 && (
-          <div role="status" className="mb-3 flex items-start gap-2 rounded-lg border bg-accent px-3 py-2 text-sm font-bold">
-            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-            <div>{notices.map((notice, index) => <p key={index}>{notice}</p>)}</div>
+    <>
+      <div className="ledger">
+        <Balance summary={list.summary} allDates={list.filters.month === "all"} />
+        <section className="activity" aria-labelledby="activity-title">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 id="activity-title" className="mb-0">Activity</h2>
+            <Button asChild><a href={context(urls.addExpense)}><Plus aria-hidden="true" /> Add expense</a></Button>
           </div>
-        )}
-        <ExpenseFilters path={urls.expenses} list={list} />
-        <div id="activity" className="results-header" tabIndex={-1}>
-          <p role="status">{resultLabel}</p>
-        </div>
-        <BulkExpenseActions urls={urls} userId={userId} list={list} selection={selection}
-          onSelection={setSelection} onSessionChanged={onSessionChanged} onRefresh={refresh}
-          onSuccess={(message) => { setSelected(null); onSuccess(message); refresh() }} />
-        {count ? <ExpenseRows list={list} context={context} selection={rowSelection} /> : (
-          <div className="notice">
-            <h3>No matching expenses</h3>
-            <p>Try changing the month or clearing your filters.</p>
-            <Button asChild variant="outline"><a href={urls.expenses}>Reset filters</a></Button>
+          {notices.length > 0 && (
+            <div role="status" className="mb-3 flex items-start gap-2 rounded-lg border bg-accent px-3 py-2 text-sm font-bold">
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+              <div>{notices.map((notice, index) => <p key={index}>{notice}</p>)}</div>
+            </div>
+          )}
+          <ExpenseFilters path={urls.expenses} list={list} />
+          <div id="activity" className="results-header" tabIndex={-1}>
+            <p role="status">{resultLabel}</p>
           </div>
-        )}
-        <Pagination path={urls.expenses} list={list} navigate={navigate} />
+          <BulkExpenseActions urls={urls} userId={userId} list={list} selection={selection}
+            onSelection={setSelection} onSessionChanged={onSessionChanged} onRefresh={refresh}
+            onSuccess={(message) => { setSelected(null); onSuccess(message); refresh() }} />
+          {count ? <ExpenseRows list={list} context={context} selection={rowSelection} /> : (
+            <div className="notice">
+              <h3>No matching expenses</h3>
+              <p>Try changing the month or clearing your filters.</p>
+              <Button asChild variant="outline"><a href={urls.expenses}>Reset filters</a></Button>
+            </div>
+          )}
+          <Pagination path={urls.expenses} list={list} navigate={navigate} />
+        </section>
+        <TopExpenses rows={list.top_expenses} />
+      </div>
+      <section aria-labelledby="account-actions-title" className="mt-8 grid justify-items-start gap-2 border-t pt-4">
+        <h2 id="account-actions-title" className="font-extrabold">Account actions</h2>
+        <p className="text-sm text-muted-foreground">This action applies to all months, regardless of your filters.</p>
+        <Button asChild variant="outline" className="h-11 text-destructive hover:text-destructive">
+          <a href={context(urls.deleteAllExpenses)}>Delete all expenses</a>
+        </Button>
       </section>
-      <TopExpenses rows={list.top_expenses} />
-    </div>
+    </>
   )
 }

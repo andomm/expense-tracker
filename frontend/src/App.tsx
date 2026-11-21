@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react"
 
-import { Button } from "@/components/ui/button"
 import { ExpenseDeletePage, LoadingExpenseDeletion } from "./expenses/ExpenseDeletePage"
 import { ExpenseFormPage, LoadingExpenseForm } from "./expenses/ExpenseFormPage"
 import { ExpensesPage, LoadingExpenses } from "./expenses/ExpensesPage"
@@ -32,16 +31,7 @@ function SignedInApp({ config, initialSession }: { config: AppConfig; initialSes
   if (!session) {
     content = <ScreenSignIn config={config} />
   } else if (config.screen === "expenses") {
-    content = <>
-      <ExpensesPage urls={config.urls} notices={config.notices} userId={config.userId} />
-      <section aria-labelledby="account-actions-title" className="mt-8 grid justify-items-start gap-2 border-t pt-4">
-        <h2 id="account-actions-title" className="font-extrabold">Account actions</h2>
-        <p className="text-sm text-muted-foreground">This action applies to all months, regardless of your filters.</p>
-        <Button asChild variant="outline" className="h-11 text-destructive hover:text-destructive">
-          <a href={config.deleteAllUrl}>Delete all expenses</a>
-        </Button>
-      </section>
-    </>
+    content = <ExpensesPage urls={config.urls} notices={config.notices} userId={config.userId} />
   } else if ("deletion" in config) {
     content = <ExpenseDeletePage routes={config.deletion} allExpenses={config.screen === "expense-delete-all"}
       urls={config.urls} userId={config.userId} session={session} onSessionChange={setSession} />
