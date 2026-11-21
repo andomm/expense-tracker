@@ -14,6 +14,7 @@ from .importers import get_importer
 
 from .allocations import build_yearly_spending_summary
 from .expense_list import ExpenseFilters, month_key, picker_years, read_expense_list, shift_month
+from .expense_save import save_expense, validate_expense
 from .helpers import categorize_from_sources
 
 from .forms import (
@@ -135,7 +136,8 @@ def _parse_decimal(value):
     if value in (None, ""):
         return None
     try:
-        return Decimal(str(value))
+        amount = Decimal(str(value))
+        return amount if amount.is_finite() else None
     except (InvalidOperation, TypeError, ValueError):
         return None
 
@@ -150,81 +152,6 @@ def _get_expense_form_context(request, *, return_url=None):
         ),
         "return_search": request.GET.get("search", request.POST.get("search", "")),
     }
-
-
-def _build_split_formset(*, request, user, total_amount):
-    kwargs = {
-        "prefix": "parts",
-        "form_kwargs": {"user": user},
-    }
-    if request.method == "POST":
-        return SplitRowFormSet(request.POST, total_amount=total_amount, **kwargs)
-    return SplitRowFormSet(**kwargs)
-
-
-def _apply_splits(formset, expense):
-    """Create new independent Expense records for each split row."""
-    split_parts = []
-    for part_form in formset.forms:
-        if not getattr(part_form, "cleaned_data", None):
-            continue
-        if part_form.cleaned_data.get("DELETE"):
-            continue
-        amount = part_form.cleaned_data.get("amount")
-        category = part_form.cleaned_data.get("category_obj")
-        if amount is None or category is None:
-            continue
-        split_parts.append((amount, category))
-
-    if not split_parts:
-        return
-
-    sign = Decimal("-1") if expense.amount < 0 else Decimal("1")
-
-    for amount, category in split_parts:
-        Expense.objects.create(
-            user=expense.user,
-            date=expense.date,
-            description=expense.description,
-            amount=sign * amount,
-            category_obj=category,
-            category=category.name,
-            split_rule=expense.split_rule,
-            receiver=expense.receiver,
-        )
-
-    split_total = sum(amount for amount, _ in split_parts)
-    remainder = abs(expense.amount) - split_total
-
-    if remainder > 0:
-        expense.amount = sign * remainder
-        expense.user_share = None
-        expense.save()
-    else:
-        expense.delete()
-
-
-def _validate_split_remainder(form, formset):
-    split_total = Decimal("0")
-    for part_form in formset.forms:
-        if not getattr(part_form, "cleaned_data", None):
-            continue
-        if part_form.cleaned_data.get("DELETE"):
-            continue
-        amount = part_form.cleaned_data.get("amount")
-        if amount:
-            split_total += amount
-
-    if split_total >= abs(form.cleaned_data["amount"]):
-        return
-
-    if form.cleaned_data.get("category_obj"):
-        return
-
-    form.add_error(
-        "category_obj",
-        "Select a category for the remaining amount or split the full expense.",
-    )
 
 
 def _build_split_summary(form, formset):
@@ -267,7 +194,7 @@ def _build_split_summary(form, formset):
     if getattr(form, "cleaned_data", None):
         category = form.cleaned_data.get("category_obj")
     if category is None:
-        category = form.initial.get("category_obj", form.instance.category_obj)
+        category = form.instance.category_obj
 
     return {
         "split_total": split_total,
@@ -332,85 +259,37 @@ def signup(request):
 
 @login_required
 def expense_add(request):
-    expense = Expense(user=request.user)
-    form = ExpenseForm(request.POST or None, instance=expense, user=request.user)
-    total_amount = (
-        _parse_decimal(request.POST.get("amount"))
-        if request.method == "POST"
-        else expense.amount
-    )
-    formset = _build_split_formset(
-        request=request,
-        user=request.user,
-        total_amount=total_amount,
-    )
-
-    if request.method == "POST" and form.is_valid():
-        formset = _build_split_formset(
-            request=request,
-            user=request.user,
-            total_amount=form.cleaned_data["amount"],
-        )
-        if formset.is_valid():
-            _validate_split_remainder(form, formset)
-            if not form.errors:
-                expense = form.save(commit=False)
-                expense.user = request.user
-                expense.save()
-                _apply_splits(formset, expense)
-                return redirect("expense_list")
-
-    return render(
-        request,
-        "expenses/expense_form.html",
-        {
-            "form": form,
-            "formset": formset,
-            "title": "Add Expense",
-            "split_summary": _build_split_summary(form, formset),
-        },
-    )
+    return _legacy_expense_form(request, Expense(user=request.user), title="Add Expense")
 
 
 @login_required
 def expense_edit(request, pk):
     expense = get_object_or_404(Expense, pk=pk, user=request.user)
-    return_url = _build_expense_list_url(
-        request.POST if request.method == "POST" else request.GET
-    )
-    form = ExpenseForm(request.POST or None, instance=expense, user=request.user)
-    total_amount = (
-        _parse_decimal(request.POST.get("amount"))
-        if request.method == "POST"
-        else expense.amount
-    )
-    formset = _build_split_formset(
-        request=request,
-        user=request.user,
-        total_amount=total_amount,
-    )
+    return _legacy_expense_form(request, expense, title="Edit Expense")
 
-    if request.method == "POST" and form.is_valid():
-        formset = _build_split_formset(
-            request=request,
-            user=request.user,
-            total_amount=form.cleaned_data["amount"],
-        )
-        if formset.is_valid():
-            _validate_split_remainder(form, formset)
-            if not form.errors:
-                form.save()
-                _apply_splits(formset, expense)
-                return redirect(return_url)
+
+def _legacy_expense_form(request, expense, *, title):
+    data = request.POST if request.method == "POST" else None
+    return_url = None
+    if expense.pk:
+        return_url = _build_expense_list_url(data if data is not None else request.GET)
+    form = ExpenseForm(data, instance=expense, user=request.user)
+    formset = SplitRowFormSet(data, prefix="parts", form_kwargs={"user": request.user})
+    if data is not None and validate_expense(form, formset):
+        save_expense(form, formset)
+        return redirect(return_url or "expense_list")
     return render(
         request,
         "expenses/expense_form.html",
         {
             "form": form,
             "formset": formset,
-            "title": "Edit Expense",
+            "title": title,
             "split_summary": _build_split_summary(form, formset),
-            **_get_expense_form_context(request, return_url=return_url),
+            **(
+                _get_expense_form_context(request, return_url=return_url)
+                if return_url else {}
+            ),
         },
     )
 

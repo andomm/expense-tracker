@@ -66,7 +66,7 @@ uv run --directory expense_tracker python manage.py runserver
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser.
 
-### Read-only Expenses pilot (local)
+### Expenses pilot (local)
 
 Requires Node.js 20.19+ on Node 20, or 22.12+, and npm in addition to the Python prerequisites. Run from a Linux or macOS shell. The pilot uses a separate local SQLite file by default. Create a test account in that database first:
 
@@ -79,12 +79,12 @@ uv run python scripts/dev.py
 
 Open [http://127.0.0.1:8000/expenses/](http://127.0.0.1:8000/expenses/) and sign in with the test account. Django serves pages and the session-protected API; Vite serves assets and refresh only. Use the Django URL as shown (not `localhost`). Ctrl+C stops both servers. To use different ports, prefix the command with e.g. `DJANGO_PORT=18009 VITE_PORT=15179`. To use a different database, pass its absolute path in `DB_PATH` to both setup and the runner.
 
-Plain Django startup keeps the legacy Expenses screen. To compare with the same test database and ports, restart the runner with `REACT_EXPENSES_PILOT=0`. Only the Expenses list switches; legacy Categories, Analytics, Import and sign-in still work. The pilot does not add transaction actions.
+Plain Django startup keeps the legacy Expenses pages. To compare with the same test database and ports, restart the runner with `REACT_EXPENSES_PILOT=0`. The pilot covers the list and add/edit forms, including share rules and category splits. Delete and bulk actions stay out of the pilot. Categories, Analytics, Import and sign-in still use legacy pages.
 
 Focused checks:
 
 ```bash
-uv run pytest --reuse-db expense_tracker/expenses/test_pilot.py
+uv run pytest --reuse-db expense_tracker/expenses/test_pilot.py expense_tracker/expenses/test_expense_forms_api.py
 npm run build --prefix frontend
 ```
 

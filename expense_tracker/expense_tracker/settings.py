@@ -61,6 +61,8 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+CSRF_FAILURE_VIEW = "expenses.api_http.csrf_failure"
+
 ROOT_URLCONF = "expense_tracker.urls"
 
 TEMPLATES = [

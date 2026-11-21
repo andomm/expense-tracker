@@ -1,48 +1,86 @@
 from collections.abc import Callable
 from functools import wraps
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
-from django.http import HttpRequest, HttpResponse
+from django.contrib.messages import get_messages
+from django.http import Http404, HttpRequest, HttpResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_safe
 
+from .models import Expense
+
 
 @login_required
 @never_cache
 @require_safe
-def react_host(request: HttpRequest, screen: str) -> HttpResponse:
+def react_host(
+    request: HttpRequest, screen: str, pk: int | None = None
+) -> HttpResponse:
+    if pk is not None and not Expense.objects.filter(user=request.user, pk=pk).exists():
+        raise Http404
+
+    app = {
+        "screen": screen,
+        "userId": request.user.pk,
+        "urls": {
+            "expenses": reverse("expense_list"),
+            "addExpense": reverse("expense_add"),
+            "analytics": reverse("expenses_per_month"),
+            "categories": reverse("category_list"),
+            "upload": reverse("upload_csv"),
+            "login": reverse("login"),
+            "logout": reverse("logout"),
+            "sessionApi": reverse("api:session"),
+            "expensesApi": reverse("api:expenses"),
+        },
+    }
+    if screen == "expenses":
+        app["notices"] = [str(message) for message in get_messages(request)]
+    else:
+        args = [] if pk is None else [pk]
+        app["form"] = {
+            "detailApi": reverse("api:expense-detail", args=args) if args else None,
+            "optionsApi": reverse("api:expense-form-options"),
+            "previewApi": reverse("api:expense-preview", args=args),
+            "returnUrl": _return_url(request),
+        }
+
     return render(
         request,
         "react_host.html",
         {
             "vite_origin": settings.VITE_DEV_ORIGIN,
-            "app": {
-                "screen": screen,
-                "urls": {
-                    "expenses": reverse("expense_list"),
-                    "analytics": reverse("expenses_per_month"),
-                    "categories": reverse("category_list"),
-                    "upload": reverse("upload_csv"),
-                    "login": reverse("login"),
-                    "logout": reverse("logout"),
-                    "sessionApi": reverse("api:session"),
-                    "expensesApi": reverse("api:expenses"),
-                },
-            },
+            "app": app,
+            "title": {
+                "expenses": "Expenses",
+                "expense-add": "Add expense",
+                "expense-edit": "Edit expense",
+            }[screen],
         },
     )
 
 
-def pilot_page(screen: str, legacy: Callable[[HttpRequest], HttpResponse]):
+def _return_url(request: HttpRequest) -> str:
+    params = {
+        key: value
+        for key in ("month", "order_by", "category_filter", "search", "page")
+        if (value := request.GET.get(key))
+    }
+    expense_list = reverse("expense_list")
+    return f"{expense_list}?{urlencode(params)}" if params else expense_list
+
+
+def pilot_page(screen: str, legacy: Callable[..., HttpResponse]):
     """Opt a named Django page into the local React pilot, never a URL prefix."""
 
     @wraps(legacy)
-    def view(request: HttpRequest) -> HttpResponse:
+    def view(request: HttpRequest, **kwargs) -> HttpResponse:
         if settings.DEBUG and settings.REACT_EXPENSES_PILOT:
-            return react_host(request, screen)
-        return legacy(request)
+            return react_host(request, screen, **kwargs)
+        return legacy(request, **kwargs)
 
     return view

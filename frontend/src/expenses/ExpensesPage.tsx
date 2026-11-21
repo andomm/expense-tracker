@@ -1,14 +1,14 @@
-import { ArrowDownLeft, ArrowUpRight, Bookmark, Receipt } from "lucide-react"
+import { ArrowDownLeft, ArrowUpRight, Bookmark, CheckCircle2, Plus, Receipt } from "lucide-react"
 import { useEffect } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useRead } from "@/lib/api"
-import { ReadFailure, SignInNotice, type AppConfig } from "@/Shell"
+import { ReadFailure, SignInNotice, type AppUrls } from "@/Shell"
 
 import { ExpenseFilters } from "./ExpenseFilters"
-import { displayDate, euro, listHref, listRequestUrl, type Expense, type ExpenseList } from "./read"
+import { displayDate, euro, expenseContextHref, listHref, listRequestUrl, type Expense, type ExpenseList } from "./read"
 
 function Balance({ summary, allDates }: { summary: ExpenseList["summary"]; allDates: boolean }) {
   return (
@@ -64,17 +64,25 @@ function TopExpenses({ rows }: { rows: Expense[] }) {
   )
 }
 
-function ExpenseRow({ row, showDate }: { row: Expense; showDate: boolean }) {
+function ExpenseRow({ row, showDate, context }: {
+  row: Expense; showDate: boolean; context: (path: string) => string
+}) {
+  const name = row.receiver || row.description || "No receiver or description"
   return (
     <li className="expense-row">
       <span className="receipt-icon"><Receipt size={17} aria-hidden="true" /></span>
       <div className="row-description">
-        <p className="row-name">{row.receiver || row.description || "No receiver or description"}</p>
+        <p className="row-name">{name}</p>
         <p className="small-note">{row.category?.name ?? "Uncategorized"}</p>
         {row.receiver && row.description && <p className="small-note row-note">{row.description}</p>}
         {showDate && <time className="small-note" dateTime={row.date}>
           {displayDate(row.date, { month: "short", day: "numeric", year: "numeric" })}
         </time>}
+        <div className="pt-1">
+          <Button asChild size="sm" variant="outline">
+            <a href={context(row.edit_url)} aria-label={`Edit expense: ${name}`}>Edit</a>
+          </Button>
+        </div>
       </div>
       <dl className="row-amounts money">
         <div><dt>Your share</dt><dd>{euro(row.personal_share)}</dd></div>
@@ -84,10 +92,10 @@ function ExpenseRow({ row, showDate }: { row: Expense; showDate: boolean }) {
   )
 }
 
-function ExpenseRows({ list }: { list: ExpenseList }) {
+function ExpenseRows({ list, context }: { list: ExpenseList; context: (path: string) => string }) {
   if (list.filters.order_by.replace(/^-/, "") !== "date") {
     return <ul className="expense-rows" aria-label="Expenses on this page">
-      {list.rows.map((row) => <ExpenseRow key={row.id} row={row} showDate />)}
+      {list.rows.map((row) => <ExpenseRow key={row.id} row={row} context={context} showDate />)}
     </ul>
   }
 
@@ -108,7 +116,7 @@ function ExpenseRows({ list }: { list: ExpenseList }) {
           <time dateTime={day}>{displayDate(day, { day: "numeric", month: "short", year: "numeric" })}</time>
         </h3>
         <ul className="expense-rows">
-          {rows.map((row) => <ExpenseRow key={row.id} row={row} showDate={false} />)}
+          {rows.map((row) => <ExpenseRow key={row.id} row={row} context={context} showDate={false} />)}
         </ul>
       </section>
     ))}
@@ -147,8 +155,8 @@ export function LoadingExpenses() {
   )
 }
 
-export function ExpensesPage({ urls }: { urls: AppConfig["urls"] }) {
-  const { result, retry } = useRead<ExpenseList>(listRequestUrl(urls.expensesApi))
+export function ExpensesPage({ urls, notices, userId }: { urls: AppUrls; notices: string[]; userId: number }) {
+  const { result, retry } = useRead<ExpenseList>(listRequestUrl(urls.expensesApi), userId)
   useEffect(() => {
     if (result.state === "ready" && location.hash === "#activity") {
       document.getElementById("activity")?.focus()
@@ -158,13 +166,14 @@ export function ExpensesPage({ urls }: { urls: AppConfig["urls"] }) {
     return <LoadingExpenses />
   }
   if (result.state === "error") {
-    return result.expired
+    return result.status === 401
       ? <SignInNotice login={urls.login} />
       : <ReadFailure message={result.message} retry={retry} reset={urls.expenses} />
   }
 
   const list = result.data
   const { page, page_size: pageSize, count } = list.pagination
+  const context = (path: string) => expenseContextHref(path, list.filters, page > 1 ? page : undefined)
   const firstRow = (page - 1) * pageSize + 1
   const resultLabel = count <= 1
     ? `${count} matching expense${count === 0 ? "s" : ""}`
@@ -173,12 +182,21 @@ export function ExpensesPage({ urls }: { urls: AppConfig["urls"] }) {
     <div className="ledger">
       <Balance summary={list.summary} allDates={list.filters.month === "all"} />
       <section className="activity" aria-labelledby="activity-title">
-        <h2 id="activity-title">Activity</h2>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 id="activity-title" className="mb-0">Activity</h2>
+          <Button asChild><a href={context(urls.addExpense)}><Plus aria-hidden="true" /> Add expense</a></Button>
+        </div>
+        {notices.length > 0 && (
+          <div role="status" className="mb-3 flex items-start gap-2 rounded-lg border bg-accent px-3 py-2 text-sm font-bold">
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+            <div>{notices.map((notice, index) => <p key={index}>{notice}</p>)}</div>
+          </div>
+        )}
         <ExpenseFilters path={urls.expenses} list={list} />
         <div id="activity" className="results-header" tabIndex={-1}>
           <p role="status">{resultLabel}</p>
         </div>
-        {count ? <ExpenseRows list={list} /> : (
+        {count ? <ExpenseRows list={list} context={context} /> : (
           <div className="notice">
             <h3>No matching expenses</h3>
             <p>Try changing the month or clearing your filters.</p>

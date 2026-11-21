@@ -23,7 +23,9 @@ def signed_in(db, client):
     return user
 
 
-def test_only_expense_list_opts_into_react(signed_in, client, settings):
+def test_expense_list_opts_into_react_without_capturing_other_routes(
+    signed_in, client, settings
+):
     path = reverse("expense_list")
     settings.REACT_EXPENSES_PILOT = False
     assert client.get(path).templates[0].name == "expenses/expense_list.html"
@@ -253,7 +255,9 @@ def test_legacy_logout_requires_csrf_and_protected_api_returns_json_afterwards(
     assert client.get(logout).status_code == 405
     assert client.post(logout).status_code == 403
     assert (
-        client.post(expenses, {"csrfmiddlewaretoken": session["csrf_token"]}).json()[
+        client.post(
+            reverse("api:session"), {"csrfmiddlewaretoken": session["csrf_token"]}
+        ).json()[
             "code"
         ]
         == "method_not_allowed"

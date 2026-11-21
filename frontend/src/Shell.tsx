@@ -5,11 +5,22 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { Session } from "@/lib/api"
 
-export type AppConfig = {
-  screen: "expenses"
-  urls: Record<"expenses" | "analytics" | "categories" | "upload" | "login" | "logout"
-    | "sessionApi" | "expensesApi", string>
+export type FormRoutes = {
+  detailApi: string | null
+  optionsApi: string
+  previewApi: string
+  returnUrl: string
 }
+
+export type AppUrls = Record<"expenses" | "addExpense" | "analytics" | "categories" | "upload"
+  | "login" | "logout" | "sessionApi" | "expensesApi", string>
+
+export type AppConfig = { urls: AppUrls; userId: number } & (
+  | { screen: "expenses"; notices: string[] }
+  | { screen: "expense-add" | "expense-edit"; form: FormRoutes }
+)
+
+const titles = { expenses: "Expenses", "expense-add": "Add expense", "expense-edit": "Edit expense" }
 
 export function signInHref(login: string) {
   return `${login}?${new URLSearchParams({ next: location.pathname + location.search })}`
@@ -69,10 +80,10 @@ export function Shell({ config, session, children }: {
         <div className="page-title">
           <div>
             <p className="eyebrow">Personal ledger</p>
-            <h1>Expenses</h1>
+            <h1>{titles[config.screen]}</h1>
           </div>
           <Badge variant="secondary" className="gap-2 px-3 py-1">
-            <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" /> Read-only pilot
+            <span className="size-1.5 rounded-full bg-primary" aria-hidden="true" /> Expenses pilot
           </Badge>
         </div>
         {children}
@@ -81,22 +92,24 @@ export function Shell({ config, session, children }: {
   )
 }
 
-export function SignInNotice({ login }: { login: string }) {
+export function SignInNotice({ login, form = false }: { login: string; form?: boolean }) {
   return (
     <div className="notice" role="alert">
       <h2>Sign in to see your expenses</h2>
-      <p>Your session ended. Sign in again to return to these filters.</p>
+      <p>{form
+        ? "Your session ended or changed. Sign in again to reopen this page. Unsaved changes will not be restored or sent."
+        : "Your session ended or changed. Sign in again to return to these filters."}</p>
       <Button asChild><a href={signInHref(login)}>Sign in</a></Button>
     </div>
   )
 }
 
-export function ReadFailure({ message, retry, reset }: {
-  message: string; retry: () => void; reset?: string
+export function ReadFailure({ message, retry, reset, title = "Could not load expenses" }: {
+  message: string; retry: () => void; reset?: string; title?: string
 }) {
   return (
     <div className="notice" role="alert">
-      <h2>Could not load expenses</h2>
+      <h2>{title}</h2>
       <p>{message || "Check your connection and try again."}</p>
       <div className="flex flex-wrap gap-2">
         <Button onClick={retry}>Retry</Button>

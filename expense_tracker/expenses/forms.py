@@ -126,13 +126,13 @@ class SortForm(forms.Form):
 
 class ExpenseForm(forms.ModelForm):
     category_obj = forms.ModelChoiceField(
-        queryset=Category.objects.all(),
+        queryset=Category.objects.none(),
         required=False,
         label="Category",
         help_text="Select a category for this expense",
     )
     split_rule = forms.ModelChoiceField(
-        queryset=ExpenseSplitRule.objects.all(),
+        queryset=ExpenseSplitRule.objects.none(),
         required=False,
         label="Splitting Rule",
         help_text="Optional: Select a split rule if this expense is shared",
@@ -145,29 +145,27 @@ class ExpenseForm(forms.ModelForm):
             "date": forms.DateInput(attrs={"type": "date"}),
         }
 
-    def __init__(self, *args, user=None, **kwargs):
+    def __init__(self, *args, user=None, show_choices=True, **kwargs):
         super().__init__(*args, **kwargs)
-        if user:
-            categories = list(get_user_category_queryset(user))
-            self.fields["category_obj"].queryset = get_user_category_queryset(user)
+        categories = get_user_category_queryset(user)
+        self.fields["category_obj"].queryset = categories
+        if show_choices:
             self.fields["category_obj"].choices = build_category_choices(
-                categories,
-                empty_label="---------",
+                categories, empty_label="---------"
             )
-            # Filter split rules to user's rules
-            self.fields["split_rule"].queryset = ExpenseSplitRule.objects.filter(
-                user=user
-            )
+        if user and user.is_authenticated:
+            self.fields["split_rule"].queryset = ExpenseSplitRule.objects.filter(user=user)
         # category_obj is not in Meta.fields so Django won't populate it from the
         # instance automatically — set it explicitly when editing an existing expense.
         if self.instance and self.instance.pk and self.instance.category_obj_id:
             self.initial["category_obj"] = self.instance.category_obj_id
 
-    def save(self, commit=True):
+    def save(self, commit=True, *, clear_category=False):
         expense = super().save(commit=False)
-        if self.cleaned_data.get("category_obj"):
-            expense.category_obj = self.cleaned_data["category_obj"]
-            expense.category = self.cleaned_data["category_obj"].name
+        category = self.cleaned_data["category_obj"]
+        if category or clear_category:
+            expense.category_obj = category
+            expense.category = category.name if category else ""
         if commit:
             expense.save()
         return expense
@@ -218,11 +216,12 @@ class SplitRowForm(forms.Form):
         label="Split amount",
     )
 
-    def __init__(self, *args, user=None, **kwargs):
+    def __init__(self, *args, user=None, show_choices=True, **kwargs):
         super().__init__(*args, **kwargs)
-        categories = list(get_user_category_queryset(user))
-        self.fields["category_obj"].queryset = get_user_category_queryset(user)
-        self.fields["category_obj"].choices = build_category_choices(categories)
+        categories = get_user_category_queryset(user)
+        self.fields["category_obj"].queryset = categories
+        if show_choices:
+            self.fields["category_obj"].choices = build_category_choices(categories)
 
 
 class BaseSplitRowFormSet(BaseFormSet):
@@ -230,23 +229,26 @@ class BaseSplitRowFormSet(BaseFormSet):
         self.total_amount = abs(total_amount) if total_amount is not None else None
         super().__init__(*args, **kwargs)
 
+    @property
+    def parts(self) -> list[tuple[Decimal, Category]]:
+        return [
+            (data["amount"], data["category_obj"])
+            for form in self.forms
+            if (data := form.cleaned_data)
+            and not data.get("DELETE")
+            and data.get("amount") is not None
+            and data.get("category_obj") is not None
+        ]
+
+    @property
+    def split_total(self) -> Decimal:
+        return sum((amount for amount, _ in self.parts), Decimal(0))
+
     def clean(self):
         super().clean()
-        if any(self.errors):
+        if any(self.errors) or self.total_amount is None:
             return
-
-        if self.total_amount is None:
-            return
-
-        split_total = Decimal("0")
-        for form in self.forms:
-            if not form.cleaned_data or form.cleaned_data.get("DELETE"):
-                continue
-            amount = form.cleaned_data.get("amount")
-            if amount:
-                split_total += amount
-
-        if split_total > self.total_amount:
+        if self.split_total > self.total_amount:
             raise forms.ValidationError(
                 "Split amounts cannot exceed the expense amount."
             )

@@ -7,6 +7,7 @@ export type Filters = {
 
 export type Expense = {
   id: number
+  edit_url: string
   date: string
   receiver: string
   description: string
@@ -37,12 +38,16 @@ export function listRequestUrl(endpoint: string) {
   return `${endpoint}?${params}`
 }
 
-export function listHref(path: string, filters: Filters, page?: number) {
+export function expenseContextHref(path: string, filters: Filters, page?: number) {
   const params = new URLSearchParams(filters)
   if (page !== undefined) {
     params.set("page", String(page))
   }
-  return `${path}?${params}${page === undefined ? "" : "#activity"}`
+  return `${path}?${params}`
+}
+
+export function listHref(path: string, filters: Filters, page?: number) {
+  return expenseContextHref(path, filters, page) + (page === undefined ? "" : "#activity")
 }
 
 // Group digits for display only. No conversion to floating point or totals in React.

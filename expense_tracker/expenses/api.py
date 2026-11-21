@@ -1,12 +1,10 @@
-from collections.abc import Callable
-from functools import wraps
-
 from django.core.paginator import Paginator
 from django.http import HttpRequest, JsonResponse
 from django.middleware.csrf import get_token
-from django.views.decorators.cache import never_cache
-from django.views.decorators.vary import vary_on_cookie
+from django.urls import reverse
 
+from .api_http import api_error, json_endpoint
+from .expense_api import create_expense
 from .expense_list import (
     ExpenseFilters,
     ExpenseListRow,
@@ -19,32 +17,7 @@ from .forms import SortForm
 PAGE_SIZE = 50
 
 
-def api_error(code: str, message: str, status: int) -> JsonResponse:
-    return JsonResponse({"code": code, "message": message}, status=status)
-
-
-def json_read(*, login_required: bool = True):
-    def decorate(view: Callable[[HttpRequest], JsonResponse]):
-        @never_cache
-        @vary_on_cookie
-        @wraps(view)
-        def read(request: HttpRequest) -> JsonResponse:
-            if request.method not in {"GET", "HEAD"}:
-                response = api_error(
-                    "method_not_allowed", "This endpoint is read-only.", 405
-                )
-                response.headers["Allow"] = "GET, HEAD"
-                return response
-            if login_required and not request.user.is_authenticated:
-                return api_error("sign_in_required", "Sign in to continue.", 401)
-            return view(request)
-
-        return read
-
-    return decorate
-
-
-@json_read(login_required=False)
+@json_endpoint("GET", login_required=False)
 def session_status(request: HttpRequest) -> JsonResponse:
     user = request.user
     return JsonResponse(
@@ -61,6 +34,7 @@ def _row_json(row: ExpenseListRow) -> dict:
     expense = row.expense
     return {
         "id": expense.pk,
+        "edit_url": reverse("expense_edit", args=[expense.pk]),
         "date": expense.date.isoformat(),
         "receiver": expense.receiver,
         "description": expense.description,
@@ -72,8 +46,11 @@ def _row_json(row: ExpenseListRow) -> dict:
     }
 
 
-@json_read()
+@json_endpoint("GET", "POST")
 def expense_list(request: HttpRequest) -> JsonResponse:
+    if request.method == "POST":
+        return create_expense(request)
+
     params = request.GET
     try:
         number = int(params.get("page", "1"))

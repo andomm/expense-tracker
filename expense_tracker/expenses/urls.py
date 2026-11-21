@@ -4,14 +4,14 @@ from .react_pages import pilot_page
 
 urlpatterns = [
     path("", pilot_page("expenses", views.expense_list), name="expense_list"),
-    path("add/", views.expense_add, name="expense_add"),
+    path("add/", pilot_page("expense-add", views.expense_add), name="expense_add"),
     path(
         "bulk-category-update/",
         views.expense_bulk_category_update,
         name="expense_bulk_category_update",
     ),
     path("bulk-delete/", views.expense_bulk_delete, name="expense_bulk_delete"),
-    path("<int:pk>/edit/", views.expense_edit, name="expense_edit"),
+    path("<int:pk>/edit/", pilot_page("expense-edit", views.expense_edit), name="expense_edit"),
     path("<int:pk>/delete/", views.expense_delete, name="expense_delete"),
     path("delete/", views.expense_delete_all, name="expense_delete_all"),
     path("upload/", views.upload_csv, name="upload_csv"),
