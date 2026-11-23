@@ -12,6 +12,23 @@ A personal finance web app for tracking expenses and income, built with Django a
 - Import OP or Spiir CSV files and review the import results.
 - Explore daily and monthly spending, category breakdowns, cash flow and yearly totals. Open chart data tables for exact amounts.
 
+## Screenshots
+
+![Expenses dashboard with a monthly balance, filters, and sample transactions](pictures/main_view.png)
+
+<details>
+<summary>More screenshots: add expense, analytics, categories, and CSV import</summary>
+
+![Add expense form with a 50% share, a category split, and an amount preview](pictures/add_expense.png)
+
+![Dark mode analytics dashboard with spending, category, and cash-flow charts](pictures/analytics.png)
+
+![Category tree with an expanded Food & drink group and keyword matching controls](pictures/categories.png)
+
+![CSV import form with a sample OP export selected](pictures/upload.png)
+
+</details>
+
 ## Tech Stack
 
 - **Python 3.13** / **Django 5.2**
