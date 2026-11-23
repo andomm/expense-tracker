@@ -7,7 +7,7 @@ from django.forms.utils import ErrorDict
 from django.http import HttpRequest, JsonResponse
 
 from .api_http import MalformedRequest, api_error, json_endpoint, json_object
-from .expense_save import save_expense, signed_part, validate_expense
+from .expense_save import plan_expense, save_expense, validate_expense
 from .forms import (
     BaseSplitRowFormSet,
     ExpenseForm,
@@ -158,13 +158,13 @@ def _field_messages(errors: ErrorDict) -> dict[str, list[str]]:
 
 def _save(request: HttpRequest, expense: Expense, *, status: int) -> JsonResponse:
     form, splits = _bind_forms(json_object(request), expense)
-    valid = validate_expense(form, splits)
-    if valid and _personal_share(form, splits) is None:
+    plan = plan_expense(form, splits) if validate_expense(form, splits) else None
+    if plan is not None and plan.personal_share() is None:
         form.add_error(
             "split_rule", "The selected rule makes a personal share too large."
         )
-        valid = False
-    if not valid:
+        plan = None
+    if plan is None:
         errors = _field_messages(form.errors)
         if splits.non_form_errors():
             errors["splits"] = list(splits.non_form_errors())
@@ -179,37 +179,12 @@ def _save(request: HttpRequest, expense: Expense, *, status: int) -> JsonRespons
             "validation_failed", "Check the highlighted fields.", 422, fields=errors
         )
 
-    result = save_expense(form, splits, clear_category=True)
+    result = save_expense(form, plan)
     count = len(result.expense_ids)
     messages.success(
         request, "Expense saved." if count == 1 else f"Saved {count} expenses."
     )
     return JsonResponse(asdict(result), status=status)
-
-
-def _personal_share(form: ExpenseForm, splits: BaseSplitRowFormSet) -> Decimal | None:
-    data = form.cleaned_data
-    amount = data["amount"]
-    rule = data["split_rule"]
-    if splits.parts:
-        magnitudes = [value for value, _ in splits.parts]
-        remainder = abs(amount) - splits.split_total
-        if remainder:
-            magnitudes.append(remainder)
-        sources = [
-            Expense(amount=signed_part(amount, value), split_rule=rule)
-            for value in magnitudes
-        ]
-    else:
-        sources = [
-            Expense(amount=amount, split_rule=rule, user_share=form.instance.user_share)
-        ]
-
-    # The stored share rounds per independent expense, not once for the full amount.
-    shares = [source.share_for_save().quantize(Decimal("0.01")) for source in sources]
-    if any(abs(value) > Decimal("99999999.99") for value in shares):
-        return None
-    return sum(shares, Decimal(0))
 
 
 @json_endpoint("POST")
@@ -233,7 +208,7 @@ def expense_preview(request: HttpRequest, pk: int | None = None) -> JsonResponse
     )
     share = None
     if remainder is not None and remainder >= 0 and "split_rule" in data:
-        share = _personal_share(form, splits)
+        share = plan_expense(form, splits).personal_share()
     return JsonResponse(
         {
             "amount": _money(amount),

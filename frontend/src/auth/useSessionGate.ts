@@ -2,14 +2,14 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react"
 import { flushSync } from "react-dom"
 
 import type { AppConfig } from "@/Shell"
-import { PROTECTED_SESSION_REJECTED, readJson, submitAuth, type Session } from "@/lib/api"
+import { PROTECTED_SESSION_REJECTED, readJson, submitAuth, type ApiError, type Session } from "@/lib/api"
 
 import { sessionChannelName, type SessionEvent } from "./session-events"
 
 type Gate = { kind: "checking" | "unavailable" | "signing-out" | "leaving" }
   | { kind: "active" | "expired"; session: Session }
 
-export function useSessionGate({ urls, userId }: AppConfig, keepDraft: boolean) {
+export function useSessionGate({ urls, userId, screen }: AppConfig, keepDraft: boolean) {
   const [gate, setGate] = useState<Gate>({ kind: "checking" })
   const [ownerSession, setOwnerSession] = useState<Session | null>(null)
   const [readVersion, setReadVersion] = useState(0)
@@ -17,6 +17,7 @@ export function useSessionGate({ urls, userId }: AppConfig, keepDraft: boolean) 
   const [resumed, setResumed] = useState(false)
   const marker = useRef<string | null | undefined>(undefined)
   const expired = useRef(false)
+  const refreshExpenses = useRef(false)
   const check = useRef<AbortController | null>(null)
   const logout = useRef<AbortController | null>(null)
   const channel = useRef<BroadcastChannel | null>(null)
@@ -38,11 +39,12 @@ export function useSessionGate({ urls, userId }: AppConfig, keepDraft: boolean) 
       if (explicitlyLoggedOut) {
         flushSync(() => setOwnerSession(null))
       }
-      if (expired.current || explicitlyLoggedOut) {
+      if (expired.current || explicitlyLoggedOut || refreshExpenses.current) {
         setReadVersion((version) => version + 1)
         setResumed(!explicitlyLoggedOut && expired.current && keepDraft)
       }
       expired.current = false
+      refreshExpenses.current = false
       setOwnerSession(session)
       setGate({ kind: "active", session })
     } else {
@@ -84,6 +86,17 @@ export function useSessionGate({ urls, userId }: AppConfig, keepDraft: boolean) 
       freeze()
       revalidate()
     }
+    function rejectedRequest(event: Event) {
+      const error = (event as CustomEvent<ApiError>).detail
+      if (error?.body?.code === "session_changed") {
+        // The rejected request observed a different account, even if the tab
+        // switches back before the session check completes.
+        setOwnerSession(null)
+        setResumed(false)
+      }
+      refreshExpenses.current = screen === "expenses"
+      sessionRejected()
+    }
     function restore(event: PageTransitionEvent) {
       if (!event.persisted) return
       // Re-read cached lists, charts, and confirmations after leaving the page.
@@ -105,7 +118,7 @@ export function useSessionGate({ urls, userId }: AppConfig, keepDraft: boolean) 
     window.addEventListener("focus", revalidate)
     window.addEventListener("pagehide", freeze)
     window.addEventListener("pageshow", restore)
-    window.addEventListener(PROTECTED_SESSION_REJECTED, sessionRejected)
+    window.addEventListener(PROTECTED_SESSION_REJECTED, rejectedRequest)
     revalidate()
     return () => {
       check.current?.abort()
@@ -117,9 +130,9 @@ export function useSessionGate({ urls, userId }: AppConfig, keepDraft: boolean) 
       window.removeEventListener("focus", revalidate)
       window.removeEventListener("pagehide", freeze)
       window.removeEventListener("pageshow", restore)
-      window.removeEventListener(PROTECTED_SESSION_REJECTED, sessionRejected)
+      window.removeEventListener(PROTECTED_SESSION_REJECTED, rejectedRequest)
     }
-  }, [keepDraft, revalidate])
+  }, [keepDraft, revalidate, screen])
 
   async function signOut() {
     if (gate.kind !== "active" || logout.current) return

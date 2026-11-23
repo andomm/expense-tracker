@@ -175,12 +175,18 @@ def test_date_category_and_search_filters(
         "c": make_expense(day=prior, receiver="Miscellaneous").pk,
         "d": make_expense(day=current, receiver="Groceries").pk,
     }
+    if filters.get("category_filter") == "root":
+        # A same-month, categorized expense outside the selected tree must not match.
+        unrelated = Category.objects.create(user=signed_in, name="Produce")
+        make_expense(day=prior, receiver="Produce market", category_obj=unrelated)
     params = {**filters}
     if params.get("month") == "specific":
         params["month"] = prior.isoformat()[:7]
     if params.get("category_filter") == "root":
         params["category_filter"] = root.pk
-    result = client.get(reverse("api:expenses"), params).json()
+    response = client.get(reverse("api:expenses"), params)
+    assert response.status_code == 200
+    result = response.json()
     assert [row["id"] for row in result["rows"]] == [rows[key] for key in keys]
     assert result["months"]["current"] == current.isoformat()[:7]
     assert result["months"]["min_year"] == prior.year

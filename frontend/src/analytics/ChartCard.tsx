@@ -24,8 +24,9 @@ export function ChartEmpty({ children }: { children: ReactNode }) {
   return <p className="rounded-lg bg-background px-3 py-6 text-sm text-muted-foreground">{children}</p>
 }
 
-export function ValuesTable({ caption, columns, rows }: {
+export function ValuesTable({ caption, columns, rows, renderLabel }: {
   caption: string; columns: string[]; rows: [string, ...ReactNode[]][]
+  renderLabel?: (label: string, index: number) => ReactNode
 }) {
   return (
     <table className="w-full table-fixed text-xs sm:text-sm">
@@ -34,15 +35,17 @@ export function ValuesTable({ caption, columns, rows }: {
         <tr className="border-b text-muted-foreground">
           {columns.map((label, index) => (
             <th key={label} scope="col" className={index === 0
-              ? "py-2 pr-1 text-left font-semibold"
+              ? `py-2 pr-1 text-left font-semibold ${renderLabel ? "w-1/2" : ""}`
               : "py-2 pl-1 text-right font-semibold"}>{label}</th>
           ))}
         </tr>
       </thead>
       <tbody className="divide-y">
-        {rows.map(([label, ...values]) => (
+        {rows.map(([label, ...values], index) => (
           <tr key={label}>
-            <th scope="row" className="py-2 pr-1 text-left font-medium wrap-anywhere">{label}</th>
+            <th scope="row" className="py-2 pr-1 text-left font-medium wrap-anywhere">
+              {renderLabel ? renderLabel(label, index) : label}
+            </th>
             {values.map((value, index) => (
               <td key={columns[index + 1]} className="py-2 pl-1 text-right font-semibold tabular-nums wrap-anywhere">
                 {value}

@@ -14,8 +14,6 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from secrets import token_urlsafe
-
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.http import HttpRequest, HttpResponse
@@ -23,14 +21,12 @@ from django.middleware.csrf import rotate_token
 from django.shortcuts import redirect
 from django.urls import include, path
 from expenses.react_pages import auth_host
-from expenses.session_api import mark_logout
 
 
 class AppLogoutView(auth_views.LogoutView):
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         response = super().post(request, *args, **kwargs)
         rotate_token(request)
-        mark_logout(response, token_urlsafe(16))
         return response
 
 

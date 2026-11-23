@@ -36,7 +36,7 @@ async function requestJson<T>(url: string, options: RequestInit, protectedReques
   if (!response.ok) {
     const error = new ApiError(response.status, await response.json().catch(() => null) as ErrorBody | null)
     if (protectedRequest && !options.signal?.aborted && error.needsSessionCheck) {
-      window.dispatchEvent(new Event(PROTECTED_SESSION_REJECTED))
+      window.dispatchEvent(new CustomEvent(PROTECTED_SESSION_REJECTED, { detail: error }))
     }
     throw error
   }

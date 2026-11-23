@@ -48,6 +48,13 @@ def upload(client, data, *, format=OP, url=START, **headers):
     [
         (OP, "\ufeff" + OP_HEADER + OP_ROW, "2024-03-02", "train", "-12.35"),
         (
+            OP,
+            OP_HEADER + OP_ROW.replace("2024-03-02", "2025-1-2"),
+            "2025-01-02",
+            "train",
+            "-12.35",
+        ),
+        (
             SPIIR,
             SPIIR_HEADER
             + '"02-03-2024";Original;"12.35";North Market;"train; refund"\n',
@@ -56,7 +63,11 @@ def upload(client, data, *, format=OP, url=START, **headers):
             "12.35",
         ),
     ],
-    ids=["op-decimal-comma-and-bom", "spiir-quoted-and-signed"],
+    ids=[
+        "op-decimal-comma-and-bom",
+        "op-single-digit-month-and-day",
+        "spiir-quoted-and-signed",
+    ],
 )
 def test_import_formats_preserve_values_and_keyword_priority(
     accounts, format, data, date, description, amount
@@ -90,7 +101,8 @@ def test_import_formats_preserve_values_and_keyword_priority(
 @pytest.mark.parametrize(
     ("format", "data", "row", "message"),
     [
-        (OP, OP_HEADER + OP_ROW + "2024-02-30;;1;;private memo\n", 3, "valid date"),
+        (OP, OP_HEADER + OP_ROW + "2024-2-30;;1;;private memo\n", 3, "valid date"),
+        (OP, OP_HEADER + OP_ROW + "not-a-date;;1;;private memo\n", 3, "valid date"),
         (
             SPIIR,
             SPIIR_HEADER + "02-03-2024;;1;;\n2024-03-03;;2;;private memo\n",
@@ -159,7 +171,8 @@ def test_import_formats_preserve_values_and_keyword_priority(
         (OP, OP_HEADER.encode() + b"\xff private memo\n", None, "UTF-8 encoding"),
     ],
     ids=[
-        "op-invalid-date",
+        "op-invalid-calendar-date",
+        "op-unrecognized-date",
         "spiir-invalid-date",
         "nan",
         "infinity",

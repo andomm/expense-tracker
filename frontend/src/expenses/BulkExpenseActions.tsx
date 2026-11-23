@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react"
 
+import { useProtectedActive } from "@/auth/access"
 import { Button } from "@/components/ui/button"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { ApiError } from "@/lib/api"
@@ -25,6 +26,7 @@ type Props = {
 export function BulkExpenseActions({
   urls, userId, csrfToken, list, selection, onSelection, onSuccess, onRefresh,
 }: Props) {
+  const active = useProtectedActive()
   const [action, setAction] = useState<BulkAction | null>(null)
   const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
@@ -32,6 +34,7 @@ export function BulkExpenseActions({
   const [needsCheck, setNeedsCheck] = useState(false)
   const inFlight = useRef<AbortController | null>(null)
   useEffect(() => () => inFlight.current?.abort(), [])
+  useEffect(() => { if (!active) setAction(null) }, [active])
 
   const matching = selection.mode === "matching"
   const count = matching ? selection.count : selection.ids.size
@@ -75,7 +78,7 @@ export function BulkExpenseActions({
   }
 
   function submit(categoryId: string) {
-    if (!action || !count || stale || failure?.next) return
+    if (!active || !action || !count || stale || failure?.next) return
     setFailure(null)
     let applying = false
     void run(async (signal) => {
@@ -90,6 +93,7 @@ export function BulkExpenseActions({
         onSuccess(`${action === "delete" ? "Deleted" : "Recategorized"} ${expensesLabel(result.affected_count)}.`)
       }
     }, (error) => {
+      if (error instanceof ApiError && error.needsSessionCheck) return
       if (error instanceof ApiError && error.status === 409 && matching) {
         onSelection({ ...selection, stale: true })
         setFailure({ message: "The confirmed matches changed or expired. Nothing was changed. Confirm the matches again.", next: "reconfirm" })
@@ -146,7 +150,7 @@ export function BulkExpenseActions({
           {needsCheck ? "Check expenses" : "Refresh results"}
         </Button>
       </div>}
-      {action && <BulkDialog action={action} count={count} categories={categories} pending={pending}
+      {active && action && <BulkDialog action={action} count={count} categories={categories} pending={pending}
         failure={failure} onClose={() => setAction(null)} onSubmit={submit} onRefresh={onRefresh} />}
     </section>
   )

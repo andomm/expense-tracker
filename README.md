@@ -90,6 +90,9 @@ Semicolon-delimited export from the [Spiir](https://spiir.dk) app:
 
 ## Running Tests
 
+Run from repository root (collects both Django test classes and pytest functions):
+
 ```bash
-uv run --directory expense_tracker python manage.py test
+uv run pytest --reuse-db
+uv run pytest --reuse-db expense_tracker/expenses/test_analytics.py
 ```

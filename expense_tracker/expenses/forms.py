@@ -112,16 +112,6 @@ class ExpenseForm(forms.ModelForm):
         if user and user.is_authenticated:
             self.fields["split_rule"].queryset = ExpenseSplitRule.objects.filter(user=user)
 
-    def save(self, commit=True, *, clear_category=False):
-        expense = super().save(commit=False)
-        category = self.cleaned_data["category_obj"]
-        if category or clear_category:
-            expense.category_obj = category
-            expense.category = category.name if category else ""
-        if commit:
-            expense.save()
-        return expense
-
 
 class SplitRowForm(forms.Form):
     category_obj = forms.ModelChoiceField(

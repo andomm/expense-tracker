@@ -6,6 +6,8 @@ from datetime import date, datetime
 from decimal import Decimal
 from io import TextIOWrapper
 
+from django.utils.dateparse import parse_date
+
 
 class CSVError(ValueError):
     def __init__(self, message: str, *, row: int | None = None):
@@ -74,12 +76,14 @@ class BaseExpenseImporter:
                     "Invalid CSV quoting or a field is too long.", row=line
                 ) from None
 
-    def parse_date(self, value: str) -> date:
-        return date.fromisoformat(value)
+    def parse_date(self, value: str) -> date | None:
+        raise NotImplementedError
 
     def parse_row(self, values: dict[str, str], line: int) -> ParsedExpenseRow:
         try:
             day = self.parse_date(values[self.date_column].strip())
+            if day is None:
+                raise ValueError
         except ValueError:
             raise CSVError(
                 f"Enter a valid date in {self.date_column} ({self.date_format}).",
@@ -104,6 +108,9 @@ class FinnishBankCSVImporter(BaseExpenseImporter):
     description_column = "Viesti"
     receiver_column = "Saaja/Maksaja"
     decimal_separator = ","
+
+    def parse_date(self, value: str) -> date | None:
+        return parse_date(value)
 
 
 class SpiirCSVImporter(BaseExpenseImporter):

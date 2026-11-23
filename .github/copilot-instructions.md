@@ -40,16 +40,14 @@ cd expense_tracker
 python manage.py createsuperuser
 ```
 
-**Run tests:**
+**Run tests from repository root:**
 ```bash
-cd expense_tracker
-python manage.py test
+uv run pytest --reuse-db
 ```
 
-**Run specific test:**
+**Run a focused test file:**
 ```bash
-cd expense_tracker
-python manage.py test expenses.tests.TestClassName
+uv run pytest --reuse-db expense_tracker/expenses/test_analytics.py
 ```
 
 **Database shell (interactive):**

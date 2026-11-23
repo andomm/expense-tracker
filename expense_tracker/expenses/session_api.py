@@ -1,29 +1,14 @@
-from secrets import token_urlsafe
-
 from django.conf import settings
 from django.contrib.auth import login, logout
 from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import HttpRequest, JsonResponse
 from django.middleware.csrf import get_token, rotate_token
 from django.shortcuts import resolve_url
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .api_http import MalformedRequest, api_error, json_endpoint, json_object
-
-LOGOUT_COOKIE = "expense_signed_out"
-
-
-def mark_logout(response: HttpResponse, marker: str) -> None:
-    # A browser can revisit a tab after an explicit logout, even after signing
-    # back in to the same account. This marker carries no identity or privileges.
-    response.set_cookie(
-        LOGOUT_COOKIE,
-        marker,
-        httponly=True,
-        samesite="Lax",
-        secure=settings.SESSION_COOKIE_SECURE,
-    )
+from .logout_marker import logout_marker
 
 
 def _session_data(request: HttpRequest) -> dict:
@@ -33,7 +18,7 @@ def _session_data(request: HttpRequest) -> dict:
         if user.is_authenticated
         else None,
         "csrf_token": get_token(request),
-        "logout_marker": request.COOKIES.get(LOGOUT_COOKIE),
+        "logout_marker": logout_marker(request),
     }
 
 
@@ -106,13 +91,4 @@ def sign_out(request: HttpRequest) -> JsonResponse:
     json_object(request)
     logout(request)
     rotate_token(request)
-    marker = token_urlsafe(16)
-    response = JsonResponse(
-        {
-            **_session_data(request),
-            "logout_marker": marker,
-            "next": reverse("login"),
-        }
-    )
-    mark_logout(response, marker)
-    return response
+    return JsonResponse({**_session_data(request), "next": reverse("login")})

@@ -2,7 +2,6 @@ import pytest
 from django.contrib.auth.models import User
 from django.db import IntegrityError
 from django.db.models.signals import pre_delete
-from django.test import Client
 from django.urls import reverse
 
 from .models import Category, Expense
@@ -24,21 +23,6 @@ def owner(db):
 @pytest.fixture
 def other(db):
     return User.objects.create_user(username="bulk-other")
-
-
-def browser(user):
-    client = Client(enforce_csrf_checks=True)
-    if user:
-        client.force_login(user)
-    client.defaults["HTTP_X_CSRFTOKEN"] = client.get(reverse("api:session")).json()[
-        "csrf_token"
-    ]
-    return client
-
-
-@pytest.fixture
-def writer(owner):
-    return browser(owner)
 
 
 @pytest.fixture
@@ -137,11 +121,11 @@ def test_same_count_membership_change_is_stale(writer, owner, expense, action):
 
 @pytest.mark.parametrize("using_other_account", [True, False])
 def test_token_is_bound_to_original_session(
-    writer, owner, other, expense, using_other_account
+    writer, owner, other, expense, using_other_account, csrf_client
 ):
     kept = expense()
     token = post(writer, "confirm", {"filters": FILTERS}).json()["token"]
-    second = browser(other if using_other_account else owner)
+    second = csrf_client(other if using_other_account else owner)
     response = post(second, "delete", {"token": token})
     assert (response.status_code, response.json()["code"]) == (409, "stale_selection")
     assert Expense.objects.filter(pk=kept.pk).exists()
@@ -192,11 +176,13 @@ def test_explicit_scope_and_invalid_destination_do_not_partially_write(
 
 
 @pytest.mark.parametrize("action", ["confirm", "delete", "recategorize"])
-def test_bulk_endpoints_enforce_csrf_and_require_session(writer, expense, action):
+def test_bulk_endpoints_enforce_csrf_and_require_session(
+    writer, expense, action, csrf_client
+):
     kept = expense()
     response = post(writer, action, {}, HTTP_X_CSRFTOKEN="")
     assert (response.status_code, response.json()["code"]) == (403, "csrf_failed")
-    response = post(browser(None), action, {})
+    response = post(csrf_client(), action, {})
     assert (response.status_code, response.json()["code"]) == (401, "sign_in_required")
     assert Expense.objects.filter(pk=kept.pk).exists()
 

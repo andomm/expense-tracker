@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { Pie, PieChart } from "recharts"
+import { useState } from "react"
+import { Pie, PieChart, Sector, type PieLabelRenderProps } from "recharts"
 
 import { Button } from "@/components/ui/button"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
@@ -34,23 +35,57 @@ export function MonthNavigation({ period, pending, failed, changeMonth }: {
 const palette = ["spending", "cumulative", "blue", "expenses", "balance", "olive", "income", "ochre"]
 const sliceColor = (index: number) => `var(--chart-${palette[index % palette.length]})`
 
+function SliceNumber({ cx, cy, midAngle, middleRadius, index }: PieLabelRenderProps) {
+  if (midAngle === undefined || middleRadius === undefined) return null
+  const angle = -midAngle * Math.PI / 180
+  const x = cx + middleRadius * Math.cos(angle)
+  const y = cy + middleRadius * Math.sin(angle)
+  return (
+    <g aria-hidden="true" pointerEvents="none">
+      <circle cx={x} cy={y} r={12} fill="var(--card)" />
+      <text x={x} y={y} textAnchor="middle" dominantBaseline="central" fill="var(--foreground)"
+        className="text-xs font-extrabold">{index + 1}</text>
+    </g>
+  )
+}
+
 export function CategoryBreakdown({ period }: { period: CategoryPeriod }) {
+  const [selected, setSelected] = useState<number | null>(null)
   const { rows, label, total } = period
   if (!rows.length) return <ChartEmpty>No category data for {label}.</ChartEmpty>
   const hasSlices = total !== "0.00"
   const data = rows.map((row, index) => ({ ...row, size: Number(row.amount), fill: sliceColor(index) }))
+  const active = selected === null ? null : data[selected]
+  function toggle(index: number) {
+    if (data[index].size > 0) setSelected((prior) => prior === index ? null : index)
+  }
+
   return (
     <>
       <div className="relative mt-2 flex h-48 items-center justify-center sm:h-52">
         {hasSlices ? (
           <ChartContainer config={{}} className="h-full w-full">
             <PieChart aria-label={`Category spending chart for ${label}`}>
-              <Pie data={data} dataKey="size" nameKey="name" innerRadius="68%" outerRadius="94%"
-                stroke="var(--card)" strokeWidth={2} isAnimationActive={false} />
-              <ChartTooltip isAnimationActive={false} content={<ChartTooltipContent formatValue={(item) => {
-                const row = item.payload as CategoryRow
-                return `${euro(row.amount)} · ${row.percent}%`
-              }} />} />
+              <Pie data={data} dataKey="size" nameKey="name" innerRadius="64%" outerRadius="94%"
+                isAnimationActive={false} onClick={(_, index) => toggle(index)}
+                shape={({ index, cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill }) => (
+                  <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius}
+                    startAngle={startAngle} endAngle={endAngle} fill={fill}
+                    data-slice={index + 1} data-highlighted={selected === index}
+                    opacity={selected === null || selected === index ? 1 : 0.28}
+                    stroke={selected === index ? "var(--foreground)" : "var(--card)"}
+                    strokeWidth={selected === index ? 3 : 2} />
+                )}
+                labelLine={false} label={(props) => {
+                  const arcLength = Math.abs(props.startAngle - props.endAngle) * Math.PI / 180 * (props.middleRadius ?? 0)
+                  const show = selected === null ? arcLength >= 26 : selected === props.index
+                  return show ? <SliceNumber {...props} /> : null
+                }} />
+              <ChartTooltip active={active ? false : undefined} isAnimationActive={false}
+                content={<ChartTooltipContent formatValue={(item) => {
+                  const row = item.payload as CategoryRow
+                  return `${euro(row.amount)} · ${row.percent}%`
+                }} />} />
             </PieChart>
           </ChartContainer>
         ) : (
@@ -62,11 +97,22 @@ export function CategoryBreakdown({ period }: { period: CategoryPeriod }) {
         </div>
       </div>
       {!hasSlices && <p className="mb-1 text-center text-sm text-muted-foreground">Spending nets to zero.</p>}
+      {hasSlices && <p role="status" className="mb-1 text-center text-sm text-muted-foreground wrap-anywhere">
+        {active && selected !== null ? <><strong>{selected + 1}. {active.name}</strong> · {euro(active.amount)} · {active.percent}%</>
+          : "Select a category below to highlight its slice."}
+      </p>}
       <ValuesTable caption={`Exact category spending for ${label}`} columns={["Category", "Amount", "Share"]}
-        rows={rows.map((row, index) => [row.name, euro(row.amount), <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden="true" className="size-2.5 shrink-0 rounded-xs" style={{ background: sliceColor(index) }} />
-          {row.percent}%
-        </span>])} />
+        rows={rows.map((row) => [row.name, euro(row.amount), `${row.percent}%`])}
+        renderLabel={(name, index) => data[index].size === 0 ? name : (
+          <button type="button" aria-pressed={selected === index} onClick={() => toggle(index)}
+            className="flex min-h-11 w-full cursor-pointer items-center gap-1.5 rounded text-left outline-ring
+              hover:bg-accent focus-visible:outline-2 aria-pressed:bg-accent aria-pressed:font-bold">
+            <span aria-hidden="true" className="inline-grid min-w-6 shrink-0 place-items-center rounded border border-current px-0.5 tabular-nums">
+              {index + 1}
+            </span>
+            <span className="min-w-0 wrap-anywhere">{name}</span>
+          </button>
+        )} />
     </>
   )
 }

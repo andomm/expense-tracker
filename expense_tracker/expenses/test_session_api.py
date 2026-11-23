@@ -55,9 +55,13 @@ def test_sign_in_uses_django_session_and_rotates_csrf(browser):
     response = auth_post(browser, "logout", {}, signed_in["csrf_token"])
     assert response.status_code == 200
     assert response.json()["next"] == reverse("login")
-    assert response.json()["logout_marker"] != signed_in["logout_marker"]
+    marker = response.json()["logout_marker"]
+    assert marker and marker != signed_in["logout_marker"]
+    assert response.cookies["expense_signed_out"].value == marker
     assert browser.cookies["csrftoken"].value != before_logout
-    assert session(browser)["user"] is None
+    after = session(browser)
+    assert after["user"] is None
+    assert after["logout_marker"] == marker
     assert browser.get(reverse("api:expenses")).json()["code"] == "sign_in_required"
 
 
@@ -201,6 +205,46 @@ def test_post_only_page_logout_ends_api_session_and_sets_marker(browser):
     after = session(browser)
     assert after["user"] is None
     assert after["logout_marker"] and after["logout_marker"] != before["logout_marker"]
+
+
+def test_admin_logout_rotates_existing_marker_only_after_csrf_verified_post(browser):
+    user = User.objects.create_user(
+        username="staff-wallet", password=PASSWORD, is_staff=True
+    )
+    credentials = {"username": user.username, "password": PASSWORD}
+    signed_in = auth_post(
+        browser, "login", credentials, session(browser)["csrf_token"]
+    ).json()
+    marker = auth_post(browser, "logout", {}, signed_in["csrf_token"]).json()[
+        "logout_marker"
+    ]
+    signed_in = auth_post(
+        browser, "login", credentials, session(browser)["csrf_token"]
+    ).json()
+    assert signed_in["logout_marker"] == marker
+
+    url = reverse("admin:logout")
+    assert browser.get(url).status_code == 405
+    assert browser.post(url).status_code == 403
+    assert session(browser)["user"]["id"] == user.pk
+    assert session(browser)["logout_marker"] == marker
+
+    response = browser.post(url, {"csrfmiddlewaretoken": signed_in["csrf_token"]})
+    assert response.url == reverse("login")
+    after = session(browser)
+    assert after["user"] is None
+    assert after["logout_marker"] and after["logout_marker"] != marker
+    marker_cookie = response.cookies["expense_signed_out"]
+    assert marker_cookie.value == after["logout_marker"]
+    assert marker_cookie["httponly"]
+    assert marker_cookie["samesite"] == "Lax"
+    assert browser.get(reverse("api:expenses")).status_code == 401
+
+    signed_in = auth_post(browser, "login", credentials, after["csrf_token"]).json()
+    assert signed_in["logout_marker"] == after["logout_marker"]
+    browser.session.delete()
+    assert session(browser)["user"] is None
+    assert session(browser)["logout_marker"] == after["logout_marker"]
 
 
 @pytest.mark.parametrize("page", ["login", "signup"])

@@ -28,6 +28,18 @@ def _expenses(user: User) -> QuerySet[Expense]:
     )
 
 
+def _owned_root(category: Category | None, user_id: int) -> Category | None:
+    seen = set()
+    while category is not None:
+        if category.user_id != user_id or category.pk in seen:
+            return None
+        if category.parent_id is None:
+            return category
+        seen.add(category.pk)
+        category = category.parent
+    return None
+
+
 def _spending_points(spending: dict[date, Decimal]) -> list[dict]:
     cumulative = ZERO
     daily = []
@@ -83,7 +95,12 @@ def read_analytics(user: User, month_param: str) -> dict:
     category_totals: dict[str, Decimal] = defaultdict(lambda: ZERO)
     for allocation in iter_expense_allocations(_expenses(user).iterator()):
         category = allocation.category
-        kind = category.category_type if category else Category.CATEGORY_TYPE_EXPENSE
+        root = _owned_root(category, user.pk)
+        kind = (
+            category.category_type
+            if category is not None and root is not None
+            else Category.CATEGORY_TYPE_EXPENSE
+        )
         day = allocation.expense.date
         if kind == Category.CATEGORY_TYPE_INCOME:
             income[day] += allocation.amount
@@ -91,7 +108,7 @@ def read_analytics(user: User, month_param: str) -> dict:
             continue
         spending[day] += allocation.amount
         if day.year == month.year and day.month == month.month:
-            name = category.get_root().name if category else "Uncategorized"
+            name = root.name if root is not None else "Uncategorized"
             category_totals[name] += allocation.amount
 
     # Accumulate signed values before taking magnitudes, so refunds offset spending.

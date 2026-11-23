@@ -137,6 +137,65 @@ def test_analytics_is_private_to_active_session(client, accounts, transactions):
     assert response.json()["code"] == "sign_in_required"
 
 
+def test_categories_with_foreign_links_are_uncategorized_in_every_series(
+    client, accounts
+):
+    owner, other = accounts
+    root = Category.objects.create(user=owner, name="Local spending")
+    valid = Category.objects.create(user=owner, name="Local child", parent=root)
+    foreign_root = Category.objects.create(user=other, name="Private root")
+    foreign_income = Category.objects.create(
+        user=other, name="Private income", category_type=INCOME
+    )
+    foreign_middle = Category.objects.create(
+        user=other, name="Private middle", parent=root
+    )
+    orphan = Category.objects.create(
+        user=owner, name="Local orphan", parent=foreign_root
+    )
+    bridged = Category.objects.create(
+        user=owner, name="Local transfer", parent=foreign_middle, category_type=TRANSFER
+    )
+    for category, share in [
+        (valid, "-9.00"),
+        (foreign_income, "-2.50"),
+        (orphan, "-5.00"),
+        (bridged, "-4.50"),
+    ]:
+        Expense.objects.create(
+            user=owner,
+            date=date(2026, 1, 5),
+            amount=Decimal("-30.00"),
+            user_share=Decimal(share),
+            category_obj=category,
+        )
+
+    response = client.get(reverse("api:analytics"), {"month": "2026-01"})
+    assert response.status_code == 200
+    data = response.json()
+    category = data.pop("category")
+    assert (category["total"], category["rows"]) == (
+        "21.00",
+        [
+            {"name": "Uncategorized", "amount": "12.00", "percent": "57.14"},
+            {"name": "Local spending", "amount": "9.00", "percent": "42.86"},
+        ],
+    )
+    assert data == {
+        "daily": [{"date": "2026-01-05", "daily": "21.00", "cumulative": "21.00"}],
+        "monthly": [{"month": "2026-01", "total_spent": "21.00"}],
+        "yearly": [{"year": 2026, "total_spent": "21.00"}],
+        "cash_flow": [
+            {
+                "date": "2026-01-05",
+                "income": "0.00",
+                "expenses": "21.00",
+                "balance": "-21.00",
+            },
+        ],
+    }
+
+
 def test_analytics_without_allocations_returns_empty_series(client, accounts):
     data = client.get(reverse("api:analytics")).json()
     category = data.pop("category")

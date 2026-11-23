@@ -17,7 +17,7 @@ import type { Session } from "./lib/api"
 
 const AnalyticsPage = lazy(() => import("./analytics/AnalyticsPage"))
 
-function ProtectedScreen({ config, session }: { config: AppConfig; session: Session }) {
+function ProtectedScreen({ config, session, expired }: { config: AppConfig; session: Session; expired: boolean }) {
   const { urls, userId } = config
   if (config.screen === "analytics") {
     return <Suspense fallback={<LoadingAnalytics />}>
@@ -25,7 +25,7 @@ function ProtectedScreen({ config, session }: { config: AppConfig; session: Sess
     </Suspense>
   }
   if (config.screen === "expenses") {
-    return <ExpensesPage urls={urls} notices={config.notices} userId={userId} session={session} />
+    return <ExpensesPage urls={urls} notices={config.notices} userId={userId} session={session} expired={expired} />
   }
   if ("categoryList" in config) {
     return <CategoriesPage routes={config.categoryList} userId={userId} />
@@ -51,7 +51,7 @@ function ProtectedScreen({ config, session }: { config: AppConfig; session: Sess
 }
 
 export function App({ config }: { config: AppConfig }) {
-  const keepsDraft = "form" in config || ["category-add", "category-edit", "csv-upload"].includes(config.screen)
+  const keepsDraft = "form" in config || ["expenses", "category-add", "category-edit", "csv-upload"].includes(config.screen)
   const { gate, ownerSession, readVersion, resumed, logoutError, revalidate, accept, signOut } = useSessionGate(config, keepsDraft)
   const active = gate.kind === "active"
   const main = useRef<HTMLElement>(null)
@@ -72,8 +72,10 @@ export function App({ config }: { config: AppConfig }) {
         {ownerSession && <ProtectedAccess.Provider value={{ active, readVersion }}>
           <PageTitle screen={config.screen} />
           {logoutError && <p className="notice mb-4" role="alert">Could not confirm sign-out. Your session is still active. Try signing out again.</p>}
-          {resumed && <p className="notice mb-4" role="status">You’re signed in again. Review your entries before submitting. Nothing was submitted for you.</p>}
-          <ProtectedScreen config={config} session={ownerSession} />
+          {resumed && <p className="notice mb-4" role="status">You’re signed in again. {config.screen === "expenses"
+            ? "Review any selected expenses and confirm again before applying an action."
+            : "Review your entries before submitting."} Nothing was submitted for you.</p>}
+          <ProtectedScreen config={config} session={ownerSession} expired={gate.kind === "expired"} />
         </ProtectedAccess.Provider>}
       </div>
     </main>

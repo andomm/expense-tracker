@@ -2,7 +2,6 @@ import pytest
 from django.contrib.auth.models import User
 from django.db import IntegrityError
 from django.db.models.signals import pre_save
-from django.test import Client
 from django.urls import reverse
 
 from .models import Category, Expense, ExpenseSplitRule
@@ -13,15 +12,6 @@ JSON = "application/json"
 @pytest.fixture
 def owner(db):
     return User.objects.create_user(username="expense-writer")
-
-
-@pytest.fixture
-def writer(owner):
-    client = Client(enforce_csrf_checks=True)
-    client.force_login(owner)
-    token = client.get(reverse("api:session")).json()["csrf_token"]
-    client.defaults["HTTP_X_CSRFTOKEN"] = token
-    return client
 
 
 @pytest.fixture
@@ -104,19 +94,31 @@ def test_full_split_replaces_edit_source_with_independent_shared_expenses(
     )
 
 
+@pytest.mark.parametrize(
+    ("percentage", "total_share", "retained_share", "part_share"),
+    [
+        ("25", "25.00", "17.50", "7.50"),
+        (None, "100.00", "70.00", "30.00"),
+    ],
+    ids=["shared", "no-rule-resets-split-shares"],
+)
 def test_partial_split_preview_and_save_keep_positive_sign_and_main_category(
-    writer, owner, payload
+    writer, owner, payload, percentage, total_share, retained_share, part_share
 ):
     part = Category.objects.create(user=owner, name="Gift refund")
-    rule = ExpenseSplitRule.objects.create(
-        user=owner, name="25 percent", split_percentage="25"
+    rule = (
+        ExpenseSplitRule.objects.create(
+            user=owner, name="Share", split_percentage=percentage
+        )
+        if percentage is not None
+        else None
     )
     listing = reverse("api:expenses")
     source = writer.post(listing, payload, content_type=JSON).json()["retained_id"]
     data = {
         **payload,
         "amount": "100.00",
-        "share_rule_id": rule.pk,
+        "share_rule_id": rule.pk if rule else None,
         "splits": [{"amount": "30.00", "category_id": part.pk}],
     }
     preview = writer.post(
@@ -126,7 +128,7 @@ def test_partial_split_preview_and_save_keep_positive_sign_and_main_category(
         "amount": "100.00",
         "split_total": "30.00",
         "remaining": "70.00",
-        "personal_share": "25.00",
+        "personal_share": total_share,
     }
     before = writer.get(listing, {"month": "all"}).json()["rows"]
     assert [(item["id"], item["amount"]) for item in before] == [(source, "-100.00")]
@@ -147,28 +149,32 @@ def test_partial_split_preview_and_save_keep_positive_sign_and_main_category(
         source,
         payload["category_id"],
         "70.00",
-        "17.50",
+        retained_share,
     )
     assert (split["category_id"], split["amount"], split["personal_share"]) == (
         part.pk,
         "30.00",
-        "7.50",
+        part_share,
     )
 
 
 @pytest.mark.parametrize(
-    "failure,path",
+    "failure,path,preview_values",
     [
-        ("blank row", "splits[0].amount"),
-        ("nonpositive part", "splits[0].amount"),
-        ("part precision", "splits[0].amount"),
-        ("over total", "splits"),
-        ("no remainder category", "category_id"),
-        ("full amount precision", "amount"),
+        ("blank row", "splits[0].amount", ("-100.00", None, None, None)),
+        ("nonpositive part", "splits[0].amount", ("-100.00", None, None, None)),
+        ("part precision", "splits[0].amount", ("-100.00", None, None, None)),
+        ("over total", "splits", ("-100.00", "100.01", "-0.01", None)),
+        (
+            "no remainder category",
+            "category_id",
+            ("-100.00", "30.00", "70.00", "-100.00"),
+        ),
+        ("full amount precision", "amount", (None, "30.00", None, None)),
     ],
 )
 def test_invalid_edit_reports_field_paths_without_changing_list(
-    writer, payload, failure, path
+    writer, payload, failure, path, preview_values
 ):
     listing = reverse("api:expenses")
     listing_params = {"month": "all"}
@@ -189,6 +195,18 @@ def test_invalid_edit_reports_field_paths_without_changing_list(
         edited["category_id"] = None
     else:
         edited["amount"] = "-99.001"
+
+    preview = writer.post(
+        reverse("api:expense-preview", args=[pk]), edited, content_type=JSON
+    )
+    assert preview.status_code == 200
+    assert preview.json() == dict(
+        zip(
+            ("amount", "split_total", "remaining", "personal_share"),
+            preview_values,
+            strict=True,
+        )
+    )
 
     response = writer.put(
         reverse("api:expense-detail", args=[pk]), edited, content_type=JSON
@@ -301,6 +319,33 @@ def test_split_preview_adds_rounded_shares_for_independent_rows(writer, owner, p
     listing = reverse("api:expenses")
     assert writer.post(listing, data, content_type=JSON).status_code == 201
     assert writer.get(listing, {"month": "all"}).json()["summary"]["balance"] == "-0.04"
+
+
+def test_oversized_split_share_is_not_previewed_or_saved(writer, owner, payload):
+    rule = ExpenseSplitRule.objects.create(
+        user=owner, name="Oversized share", split_percentage="150"
+    )
+    data = {
+        **payload,
+        "amount": "-90000000.00",
+        "share_rule_id": rule.pk,
+        "splits": [{"amount": "80000000.00", "category_id": payload["category_id"]}],
+    }
+    preview = writer.post(reverse("api:expense-preview"), data, content_type=JSON)
+    assert preview.status_code == 200
+    assert preview.json() == {
+        "amount": "-90000000.00",
+        "split_total": "80000000.00",
+        "remaining": "10000000.00",
+        "personal_share": None,
+    }
+    listing = reverse("api:expenses")
+    rejected = writer.post(listing, data, content_type=JSON)
+    assert rejected.status_code == 422
+    assert rejected.json()["fields"] == {
+        "share_rule_id": ["The selected rule makes a personal share too large."]
+    }
+    assert writer.get(listing, {"month": "all"}).json()["rows"] == []
 
 
 def test_write_rejects_bad_csrf_malformed_json_and_missing_session(writer, payload):

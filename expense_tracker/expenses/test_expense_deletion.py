@@ -2,7 +2,6 @@ from datetime import date
 
 import pytest
 from django.contrib.auth.models import User
-from django.test import Client
 from django.urls import reverse
 
 from .models import Expense
@@ -16,17 +15,8 @@ FILTERS = {
 }
 
 
-def signed_in(user):
-    client = Client(enforce_csrf_checks=True)
-    client.force_login(user)
-    client.defaults["HTTP_X_CSRFTOKEN"] = client.get(reverse("api:session")).json()[
-        "csrf_token"
-    ]
-    return client
-
-
 @pytest.fixture
-def ledger(db):
+def ledger(csrf_client):
     owner = User.objects.create_user(username="delete-owner")
     other = User.objects.create_user(username="delete-neighbor")
 
@@ -39,7 +29,7 @@ def ledger(db):
     sibling = expense(owner, date(2026, 3, 10), "-4.70")
     outside = expense(owner, date(2026, 2, 10), "-30.00")
     foreign = expense(other, date(2026, 3, 12), "-19.99")
-    return signed_in(owner), signed_in(other), target, sibling, outside, foreign
+    return csrf_client(owner), csrf_client(other), target, sibling, outside, foreign
 
 
 def filtered_rows(client):

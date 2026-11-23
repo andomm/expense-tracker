@@ -1,6 +1,7 @@
 import { ArrowDownLeft, ArrowUpRight, Bookmark, CheckCircle2, Plus, Receipt } from "lucide-react"
-import { useEffect, useRef, useState, type MouseEvent } from "react"
+import { useContext, useEffect, useRef, useState, type MouseEvent } from "react"
 
+import { ProtectedAccess } from "@/auth/access"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -167,9 +168,10 @@ export function LoadingExpenses() {
 }
 
 type PageProps = { urls: AppUrls; notices: string[]; userId: number; session: Session }
-type ScopedSelection = { key: string; value: BulkSelection }
+type ScopedSelection = { key: string; value: BulkSelection; readVersion: number }
 
-export function ExpensesPage({ urls, notices, userId, session }: PageProps) {
+export function ExpensesPage({ urls, notices, userId, session, expired }: PageProps & { expired: boolean }) {
+  const { readVersion } = useContext(ProtectedAccess)
   const [search, setSearch] = useState(window.location.search)
   const [selected, setSelected] = useState<ScopedSelection | null>(null)
   const [success, setSuccess] = useState("")
@@ -194,6 +196,16 @@ export function ExpensesPage({ urls, notices, userId, session }: PageProps) {
     }
   }, [])
 
+  useEffect(() => {
+    // Only manually selected IDs can survive an expired session. A match token
+    // belongs to the old session and must never become actionable again.
+    setSelected((previous) => previous?.value.mode === "matching" &&
+      (expired || previous.readVersion !== readVersion) ? null : previous)
+    if (expired) setSuccess("")
+  }, [expired, readVersion])
+
+  if (expired) return null
+
   function navigate(event: MouseEvent<HTMLAnchorElement>) {
     if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
     event.preventDefault()
@@ -201,7 +213,7 @@ export function ExpensesPage({ urls, notices, userId, session }: PageProps) {
     setSearch(window.location.search)
   }
 
-  return <ExpensesResults key={`${userId}:${restores}:${request}`} request={request} urls={urls}
+  return <ExpensesResults key={`${userId}:${restores}:${readVersion}:${request}`} request={request} urls={urls}
     notices={success ? [...notices, success] : notices} userId={userId} navigate={navigate}
     selected={selected} setSelected={setSelected} onSuccess={setSuccess} session={session} />
 }
@@ -212,6 +224,7 @@ function ExpensesResults({ urls, notices, userId, request, navigate, selected, s
   selected: ScopedSelection | null; setSelected: (value: ScopedSelection | null) => void
   onSuccess: (message: string) => void
 }) {
+  const { readVersion } = useContext(ProtectedAccess)
   const { result, retry } = useRead<ExpenseList>(request, userId)
   const focusAfterRefresh = useRef(false)
   function refresh() {
@@ -237,8 +250,9 @@ function ExpensesResults({ urls, notices, userId, request, navigate, selected, s
   }
 
   const list = result.data
-  const selection = selected && selected.key === scope ? selected.value : emptySelection
-  const setSelection = (value: BulkSelection) => setSelected(scope ? { key: scope, value } : null)
+  const selection = selected?.key === scope && (selected.value.mode === "explicit" || selected.readVersion === readVersion)
+    ? selected.value : emptySelection
+  const setSelection = (value: BulkSelection) => setSelected(scope ? { key: scope, value, readVersion } : null)
   const rowSelection: RowSelection | undefined = selection.mode === "explicit" ? {
     ids: selection.ids,
     toggle(id) {
