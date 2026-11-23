@@ -1,25 +1,20 @@
 from django.urls import path
-from . import views
+
+from .react_pages import react_host
 
 urlpatterns = [
-    path("", views.expense_list, name="expense_list"),
-    path("add/", views.expense_add, name="expense_add"),
-    path(
-        "bulk-category-update/",
-        views.expense_bulk_category_update,
-        name="expense_bulk_category_update",
-    ),
-    path("bulk-delete/", views.expense_bulk_delete, name="expense_bulk_delete"),
-    path("<int:pk>/edit/", views.expense_edit, name="expense_edit"),
-    path("<int:pk>/delete/", views.expense_delete, name="expense_delete"),
-    path("delete/", views.expense_delete_all, name="expense_delete_all"),
-    path("upload/", views.upload_csv, name="upload_csv"),
-    path('upload/summary/', views.import_summary, name='import_summary'),
-    path('expenses-per-month/', views.expenses_per_month, name='expenses_per_month'),
-    path('categories/', views.category_list, name='category_list'),
-    path('categories/sync/', views.sync_categories, name='sync_categories'),
-    path('categories/sync/summary/', views.sync_summary, name='sync_summary'),
-    path('categories/add/', views.category_add, name='category_add'),
-    path('categories/<int:pk>/edit/', views.category_edit, name='category_edit'),
-    path('categories/<int:pk>/delete/', views.category_delete, name='category_delete'),
+    path("", react_host, {"screen": "expenses"}, name="expense_list"),
+    path("add/", react_host, {"screen": "expense-add"}, name="expense_add"),
+    path("<int:pk>/edit/", react_host, {"screen": "expense-edit"}, name="expense_edit"),
+    path("<int:pk>/delete/", react_host, {"screen": "expense-delete"}, name="expense_delete"),
+    path("delete/", react_host, {"screen": "expense-delete-all"}, name="expense_delete_all"),
+    path("upload/", react_host, {"screen": "csv-upload"}, name="upload_csv"),
+    path("upload/summary/", react_host, {"screen": "csv-import-result"}, name="import_summary"),
+    path("expenses-per-month/", react_host, {"screen": "analytics"}, name="expenses_per_month"),
+    path("categories/", react_host, {"screen": "categories"}, name="category_list"),
+    path("categories/sync/", react_host, {"screen": "category-sync"}, name="sync_categories"),
+    path("categories/sync/summary/", react_host, {"screen": "category-sync-result"}, name="sync_summary"),
+    path("categories/add/", react_host, {"screen": "category-add"}, name="category_add"),
+    path("categories/<int:pk>/edit/", react_host, {"screen": "category-edit"}, name="category_edit"),
+    path("categories/<int:pk>/delete/", react_host, {"screen": "category-delete"}, name="category_delete"),
 ]

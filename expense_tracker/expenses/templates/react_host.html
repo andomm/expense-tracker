@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }} · Expense Tracker</title>
+    <script>
+        if (localStorage.getItem("theme") === "dark") {
+            document.documentElement.classList.add("dark");
+        }
+    </script>
+    <!-- Paint the theme before Vite loads the app stylesheet. -->
+    <style>
+        :root {
+            color-scheme: light;
+            background-color: var(--background, #eff3ed);
+        }
+        :root.dark {
+            color-scheme: dark;
+            background-color: var(--background, #121e19);
+        }
+    </style>
+    <!-- Django sends the document, so Vite cannot inject this preamble. -->
+    <script type="module">
+        import RefreshRuntime from "{{ vite_origin }}/@react-refresh";
+        RefreshRuntime.injectIntoGlobalHook(window);
+        window.$RefreshReg$ = () => {};
+        window.$RefreshSig$ = () => (type) => type;
+        window.__vite_plugin_react_preamble_installed__ = true;
+    </script>
+    <script type="module" src="{{ vite_origin }}/@vite/client"></script>
+    <script type="module" src="{{ vite_origin }}/src/main.ts"></script>
+</head>
+<body>
+    <div id="app"></div>
+    {{ app|json_script:"app-config" }}
+    <noscript>Enable JavaScript to use Expense Tracker.</noscript>
+</body>
+</html>

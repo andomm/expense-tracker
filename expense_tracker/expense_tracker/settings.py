@@ -10,8 +10,8 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
-from pathlib import Path
 import os
+from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -57,9 +57,12 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "expenses.logout_marker.logout_marker_middleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+CSRF_FAILURE_VIEW = "expenses.api_http.csrf_failure"
 
 ROOT_URLCONF = "expense_tracker.urls"
 
@@ -147,3 +150,6 @@ LOGIN_REDIRECT_URL = "/expenses/"  # or name your view with reverse_lazy
 LOGIN_URL = "/login/"
 
 LOGOUT_REDIRECT_URL = "/login/"
+
+# Different hostname from Django keeps its cookies off the asset server.
+VITE_DEV_ORIGIN = f"http://localhost:{int(os.getenv('VITE_PORT', '5173'))}"

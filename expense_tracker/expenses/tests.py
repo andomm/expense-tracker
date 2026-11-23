@@ -1,13 +1,14 @@
 from datetime import date
-from decimal import Decimal
 
-from django.core.exceptions import ValidationError
+import pytest
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.urls import reverse
 
+from .forms import CategoryForm
 from .helpers import categorize_expense, categorize_from_sources
-from .models import Category, Expense
+from .models import MAX_CATEGORY_DEPTH, Category, Expense
 
 
 class CategorizeExpenseTests(TestCase):
@@ -166,7 +167,6 @@ class CategoryHierarchyTests(TestCase):
 
     def test_allows_up_to_max_depth(self):
         """Should be possible to create a chain of MAX_CATEGORY_DEPTH levels."""
-        from expenses.models import MAX_CATEGORY_DEPTH
         cat = Category.objects.create(user=self.user, name="Level1", keywords="")
         for i in range(2, MAX_CATEGORY_DEPTH + 1):
             cat = Category.objects.create(user=self.user, name=f"Level{i}", parent=cat, keywords="")
@@ -174,7 +174,6 @@ class CategoryHierarchyTests(TestCase):
         self.assertEqual(cat.get_depth(), MAX_CATEGORY_DEPTH)
 
     def test_prevents_exceeding_max_depth(self):
-        from expenses.models import MAX_CATEGORY_DEPTH
         cat = Category.objects.create(user=self.user, name="Level1", keywords="")
         for i in range(2, MAX_CATEGORY_DEPTH + 1):
             cat = Category.objects.create(user=self.user, name=f"Level{i}", parent=cat, keywords="")
@@ -186,7 +185,6 @@ class CategoryHierarchyTests(TestCase):
 
     def test_prevents_third_level_categories(self):
         """Backward-compat test: depth 3 still allowed, depth 6 is not."""
-        from expenses.models import MAX_CATEGORY_DEPTH
         parent = Category.objects.create(
             user=self.user,
             name="Freetime",
@@ -245,338 +243,6 @@ class DefaultCategoryOwnershipTests(TestCase):
         self.assertEqual(keyword, "power")
         self.assertEqual(category.user, user)
         self.assertFalse(category.is_system)
-
-
-class ExpenseListCategoryFilterTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(username="filter-user", password="pass")
-        self.client.force_login(self.user)
-        self.parent = Category.objects.create(
-            user=self.user,
-            name="Freetime",
-            keywords="cinema",
-        )
-        self.child = Category.objects.create(
-            user=self.user,
-            name="Gaming",
-            parent=self.parent,
-            keywords="steam",
-        )
-        self.other = Category.objects.create(
-            user=self.user,
-            name="Utilities",
-            keywords="power",
-        )
-
-    def test_parent_filter_includes_subcategory_expenses(self):
-        parent_expense = Expense.objects.create(
-            user=self.user,
-            date=date(2026, 3, 9),
-            category=self.parent.name,
-            category_obj=self.parent,
-            amount="-10.00",
-            receiver="Cinema",
-        )
-        child_expense = Expense.objects.create(
-            user=self.user,
-            date=date(2026, 3, 9),
-            category=self.child.name,
-            category_obj=self.child,
-            amount="-20.00",
-            receiver="Steam",
-        )
-        Expense.objects.create(
-            user=self.user,
-            date=date(2026, 3, 9),
-            category=self.other.name,
-            category_obj=self.other,
-            amount="-30.00",
-            receiver="Power company",
-        )
-
-        response = self.client.get(
-            reverse("expense_list"),
-            {"month": "all", "category_filter": str(self.parent.pk)},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            [expense.pk for expense in response.context["expenses"]],
-            [parent_expense.pk, child_expense.pk],
-        )
-
-    def test_expense_edit_links_preserve_filters(self):
-        expense = Expense.objects.create(
-            user=self.user,
-            date=date(2026, 3, 9),
-            category=self.parent.name,
-            category_obj=self.parent,
-            amount="-10.00",
-            receiver="Cinema",
-        )
-
-        response = self.client.get(
-            reverse("expense_list"),
-            {
-                "month": "all",
-                "order_by": "amount",
-                "category_filter": str(self.parent.pk),
-            },
-        )
-
-        edit_url = (
-            f"{reverse('expense_edit', args=[expense.pk])}"
-            f"?month=all&order_by=amount&category_filter={self.parent.pk}"
-        )
-        self.assertContains(response, edit_url.replace("&", "&amp;"), html=False)
-
-    def test_search_filters_expenses_by_receiver_description_and_category(self):
-        utilities_expense = Expense.objects.create(
-            user=self.user,
-            date=date(2026, 3, 9),
-            category=self.other.name,
-            category_obj=self.other,
-            amount="-30.00",
-            receiver="Power company",
-            description="Monthly electricity bill",
-        )
-        gaming_expense = Expense.objects.create(
-            user=self.user,
-            date=date(2026, 3, 9),
-            category=self.child.name,
-            category_obj=self.child,
-            amount="-20.00",
-            receiver="Steam",
-            description="Game purchase",
-        )
-
-        receiver_response = self.client.get(
-            reverse("expense_list"),
-            {"month": "all", "search": "power"},
-        )
-        self.assertEqual(
-            [expense.pk for expense in receiver_response.context["expenses"]],
-            [utilities_expense.pk],
-        )
-
-        description_response = self.client.get(
-            reverse("expense_list"),
-            {"month": "all", "search": "game"},
-        )
-        self.assertEqual(
-            [expense.pk for expense in description_response.context["expenses"]],
-            [gaming_expense.pk],
-        )
-
-        category_response = self.client.get(
-            reverse("expense_list"),
-            {"month": "all", "search": "utilities"},
-        )
-        self.assertEqual(
-            [expense.pk for expense in category_response.context["expenses"]],
-            [utilities_expense.pk],
-        )
-
-
-class BulkCategoryUpdateTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(username="bulk-user", password="pass")
-        self.other_user = User.objects.create_user(username="other-user", password="pass")
-        self.client.force_login(self.user)
-
-        self.original_category = Category.objects.create(
-            user=self.user,
-            name="Groceries",
-        )
-        self.new_category = Category.objects.create(
-            user=self.user,
-            name="Utilities",
-        )
-        self.other_user_category = Category.objects.create(
-            user=self.other_user,
-            name="Private Category",
-        )
-
-        self.expense_one = Expense.objects.create(
-            user=self.user,
-            date=date(2026, 3, 9),
-            category=self.original_category.name,
-            category_obj=self.original_category,
-            amount="-10.00",
-            receiver="Store one",
-        )
-        self.expense_two = Expense.objects.create(
-            user=self.user,
-            date=date(2026, 3, 10),
-            category=self.original_category.name,
-            category_obj=self.original_category,
-            amount="-20.00",
-            receiver="Store two",
-        )
-        self.other_user_expense = Expense.objects.create(
-            user=self.other_user,
-            date=date(2026, 3, 11),
-            category=self.other_user_category.name,
-            category_obj=self.other_user_category,
-            amount="-30.00",
-            receiver="Other store",
-        )
-
-    def test_updates_selected_expenses_and_preserves_context(self):
-        response = self.client.post(
-            reverse("expense_bulk_category_update"),
-            {
-                "expense_ids": [str(self.expense_one.pk), str(self.expense_two.pk)],
-                "category_obj": str(self.new_category.pk),
-                "month": "2026-03",
-                "order_by": "amount",
-                "category_filter": str(self.original_category.pk),
-            },
-            follow=True,
-        )
-
-        expected_url = (
-            f"{reverse('expense_list')}?month=2026-03&order_by=amount"
-            f"&category_filter={self.original_category.pk}"
-        )
-        self.assertRedirects(response, expected_url)
-
-        self.expense_one.refresh_from_db()
-        self.expense_two.refresh_from_db()
-        self.assertEqual(self.expense_one.category_obj, self.new_category)
-        self.assertEqual(self.expense_one.category, self.new_category.name)
-        self.assertEqual(self.expense_two.category_obj, self.new_category)
-        self.assertEqual(self.expense_two.category, self.new_category.name)
-        self.assertContains(response, "Updated 2 expenses to Utilities.")
-
-    def test_rejects_expenses_not_owned_by_current_user(self):
-        response = self.client.post(
-            reverse("expense_bulk_category_update"),
-            {
-                "expense_ids": [str(self.expense_one.pk), str(self.other_user_expense.pk)],
-                "category_obj": str(self.new_category.pk),
-                "month": "all",
-            },
-            follow=True,
-        )
-
-        self.assertRedirects(response, f"{reverse('expense_list')}?month=all")
-        self.expense_one.refresh_from_db()
-        self.assertEqual(self.expense_one.category_obj, self.original_category)
-        self.assertContains(response, "One or more selected expenses are invalid.")
-
-    def test_rejects_invalid_category_choice(self):
-        response = self.client.post(
-            reverse("expense_bulk_category_update"),
-            {
-                "expense_ids": [str(self.expense_one.pk)],
-                "category_obj": str(self.other_user_category.pk),
-                "month": "all",
-            },
-            follow=True,
-        )
-
-        self.assertRedirects(response, f"{reverse('expense_list')}?month=all")
-        self.expense_one.refresh_from_db()
-        self.assertEqual(self.expense_one.category_obj, self.original_category)
-        self.assertContains(response, "Select a valid category.")
-
-    def test_requires_at_least_one_selected_expense(self):
-        response = self.client.post(
-            reverse("expense_bulk_category_update"),
-            {
-                "category_obj": str(self.new_category.pk),
-                "month": "all",
-            },
-            follow=True,
-        )
-
-        self.assertRedirects(response, f"{reverse('expense_list')}?month=all")
-        self.expense_one.refresh_from_db()
-        self.assertEqual(self.expense_one.category_obj, self.original_category)
-        self.assertContains(response, "Select at least one expense to update.")
-
-
-class BulkDeleteTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(username="bulkdeluser", password="testpass123")
-        self.client.login(username="bulkdeluser", password="testpass123")
-        self.other_user = User.objects.create_user(
-            username="otherdeluser", password="testpass123"
-        )
-
-        self.expense_one = Expense.objects.create(
-            user=self.user,
-            date="2026-03-15",
-            description="Groceries",
-            amount="-50.00",
-            receiver="Store A",
-        )
-        self.expense_two = Expense.objects.create(
-            user=self.user,
-            date="2026-03-16",
-            description="Coffee",
-            amount="-5.00",
-            receiver="Cafe B",
-        )
-        self.other_user_expense = Expense.objects.create(
-            user=self.other_user,
-            date="2026-03-15",
-            description="Other",
-            amount="-30.00",
-            receiver="Other store",
-        )
-
-    def test_deletes_selected_expenses_and_redirects(self):
-        response = self.client.post(
-            reverse("expense_bulk_delete"),
-            {
-                "expense_ids": [str(self.expense_one.pk), str(self.expense_two.pk)],
-                "month": "2026-03",
-                "order_by": "amount",
-            },
-        )
-        expected_url = f"{reverse('expense_list')}?month=2026-03&order_by=amount"
-        self.assertRedirects(response, expected_url, fetch_redirect_response=False)
-        self.assertFalse(Expense.objects.filter(pk=self.expense_one.pk).exists())
-        self.assertFalse(Expense.objects.filter(pk=self.expense_two.pk).exists())
-
-    def test_does_not_delete_other_users_expenses(self):
-        response = self.client.post(
-            reverse("expense_bulk_delete"),
-            {
-                "expense_ids": [
-                    str(self.expense_one.pk),
-                    str(self.other_user_expense.pk),
-                ],
-                "month": "all",
-            },
-        )
-        self.assertRedirects(
-            response,
-            f"{reverse('expense_list')}?month=all",
-            fetch_redirect_response=False,
-        )
-        self.assertFalse(Expense.objects.filter(pk=self.expense_one.pk).exists())
-        self.assertTrue(Expense.objects.filter(pk=self.other_user_expense.pk).exists())
-
-    def test_redirects_on_get(self):
-        response = self.client.get(reverse("expense_bulk_delete"))
-        self.assertRedirects(
-            response, reverse("expense_list"), fetch_redirect_response=False
-        )
-
-    def test_handles_empty_selection(self):
-        response = self.client.post(
-            reverse("expense_bulk_delete"),
-            {"month": "all"},
-        )
-        self.assertRedirects(
-            response,
-            f"{reverse('expense_list')}?month=all",
-            fetch_redirect_response=False,
-        )
-        self.assertTrue(Expense.objects.filter(pk=self.expense_one.pk).exists())
 
 
 class ExpenseListSummaryTests(TestCase):
@@ -643,13 +309,13 @@ class ExpenseListSummaryTests(TestCase):
             receiver="Own account",
         )
 
-        response = self.client.get(reverse("expense_list"), {"month": "all"})
+        response = self.client.get(reverse("api:expenses"), {"month": "all"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["total_spent"], Decimal("-20.00"))
-        self.assertEqual(response.context["income"], Decimal("100.00"))
-        self.assertEqual(response.context["savings_total"], Decimal("50.00"))
-        self.assertEqual(response.context["balance"], Decimal("80.00"))
+        self.assertEqual(response.json()["summary"]["total_spent"], "-20.00")
+        self.assertEqual(response.json()["summary"]["income"], "100.00")
+        self.assertEqual(response.json()["summary"]["savings_total"], "50.00")
+        self.assertEqual(response.json()["summary"]["balance"], "80.00")
 
     def test_top_expenses_link_to_edit_page(self):
         expense = Expense.objects.create(
@@ -662,268 +328,57 @@ class ExpenseListSummaryTests(TestCase):
             receiver="Grocery store",
         )
 
-        response = self.client.get(reverse("expense_list"), {"month": "all"})
+        response = self.client.get(reverse("api:expenses"), {"month": "all"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, reverse("expense_edit", args=[expense.pk]))
+        [row] = response.json()["top_expenses"]
+        self.assertEqual(row["edit_url"], reverse("expense_edit", args=[expense.pk]))
 
 
-class ExpenseEditReturnContextTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(username="edit-user", password="pass")
-        self.client.force_login(self.user)
-        self.category = Category.objects.create(
-            user=self.user,
-            name="Groceries",
-            category_type=Category.CATEGORY_TYPE_EXPENSE,
-        )
-        self.expense = Expense.objects.create(
-            user=self.user,
-            date=date(2026, 3, 9),
-            category=self.category.name,
-            category_obj=self.category,
-            amount="-20.00",
-            user_share="-20.00",
-            receiver="Grocery store",
-            description="Weekly groceries",
-        )
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("split_values", "expected"),
+    [
+        ([("Sports", "30.00")], {"General": "-70.00", "Sports": "-30.00"}),
+        ([("Sports", "60.00"), ("Utilities", "40.00")], {"Sports": "-60.00", "Utilities": "-40.00"}),
+        ([("Sports", "30.00"), ("Utilities", "20.00")], {"General": "-50.00", "Sports": "-30.00", "Utilities": "-20.00"}),
+        ([("Savings", "20.00")], {"General": "-80.00", "Savings": "-20.00"}),
+    ],
+    ids=["partial", "full", "independent-rows", "savings"],
+)
+def test_create_expense_splits_are_independent_rows_with_correct_summary(client, split_values, expected):
+    user = User.objects.create_user(username="split-user")
+    client.force_login(user)
+    categories = {
+        name: Category.objects.get_or_create(user=user, name=name)[0]
+        for name in ["General", "Sports", "Utilities", "Savings"]
+    }
+    url = reverse("api:expenses")
+    response = client.post(
+        url,
+        {
+            "date": "2026-03-09",
+            "description": "Sports store",
+            "amount": "-100.00",
+            "category_id": categories["General"].pk,
+            "receiver": "Superstore",
+            "splits": [
+                {"category_id": categories[name].pk, "amount": amount}
+                for name, amount in split_values
+            ],
+        },
+        content_type="application/json",
+    )
 
-    def test_edit_page_back_link_preserves_list_context(self):
-        response = self.client.get(
-            reverse("expense_edit", args=[self.expense.pk]),
-            {
-                "month": "all",
-                "order_by": "amount",
-                "category_filter": str(self.category.pk),
-            },
-        )
-
-        expected_url = (
-            f"{reverse('expense_list')}?month=all&order_by=amount"
-            f"&category_filter={self.category.pk}"
-        )
-        self.assertContains(
-            response,
-            f'href="{expected_url.replace("&", "&amp;")}"',
-            html=False,
-        )
-        self.assertContains(response, 'name="month" value="all"', html=False)
-        self.assertContains(response, 'name="order_by" value="amount"', html=False)
-        self.assertContains(
-            response,
-            f'name="category_filter" value="{self.category.pk}"',
-            html=False,
-        )
-
-    def test_saving_edit_returns_to_filtered_list(self):
-        response = self.client.post(
-            reverse("expense_edit", args=[self.expense.pk]),
-            {
-                "date": "2026-03-09",
-                "description": "Updated groceries",
-                "amount": "-20.00",
-                "category_obj": str(self.category.pk),
-                "receiver": "Grocery store",
-                "month": "all",
-                "order_by": "amount",
-                "category_filter": str(self.category.pk),
-                "parts-TOTAL_FORMS": "0",
-                "parts-INITIAL_FORMS": "0",
-                "parts-MIN_NUM_FORMS": "0",
-                "parts-MAX_NUM_FORMS": "1000",
-            },
-            follow=True,
-        )
-
-        expected_url = (
-            f"{reverse('expense_list')}?month=all&order_by=amount"
-            f"&category_filter={self.category.pk}"
-        )
-        self.assertRedirects(response, expected_url)
-        self.expense.refresh_from_db()
-        self.assertEqual(self.expense.description, "Updated groceries")
-
-
-class ExpenseSplitTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(username="split-user", password="pass")
-        self.client.force_login(self.user)
-        self.general = Category.objects.create(user=self.user, name="General")
-        self.sports = Category.objects.create(user=self.user, name="Sports")
-        self.utilities = Category.objects.create(user=self.user, name="Utilities")
-        self.savings = Category.objects.get(user=self.user, name="Savings")
-
-    def _formset_management(self, *, total_forms, initial_forms=0):
-        return {
-            "parts-TOTAL_FORMS": str(total_forms),
-            "parts-INITIAL_FORMS": str(initial_forms),
-            "parts-MIN_NUM_FORMS": "0",
-            "parts-MAX_NUM_FORMS": "1000",
-        }
-
-    def test_split_creates_new_expenses_and_keeps_remainder(self):
-        response = self.client.post(
-            reverse("expense_add"),
-            {
-                "date": "2026-03-09",
-                "description": "Sports store",
-                "amount": "-100.00",
-                "category_obj": str(self.general.pk),
-                "split_rule": "",
-                "receiver": "Superstore",
-                "parts-0-amount": "30.00",
-                "parts-0-category_obj": str(self.sports.pk),
-                **self._formset_management(total_forms=1),
-            },
-            follow=True,
-        )
-
-        self.assertRedirects(response, reverse("expense_list"))
-        self.assertEqual(Expense.objects.filter(user=self.user).count(), 2)
-
-        remainder = Expense.objects.get(category_obj=self.general, user=self.user)
-        split_expense = Expense.objects.get(category_obj=self.sports, user=self.user)
-
-        self.assertEqual(remainder.amount, Decimal("-70.00"))
-        self.assertEqual(remainder.receiver, "Superstore")
-        self.assertEqual(split_expense.amount, Decimal("-30.00"))
-        self.assertEqual(split_expense.receiver, "Superstore")
-        self.assertEqual(split_expense.date, date(2026, 3, 9))
-
-    def test_full_split_deletes_original_expense(self):
-        response = self.client.post(
-            reverse("expense_add"),
-            {
-                "date": "2026-03-09",
-                "description": "Full split",
-                "amount": "-100.00",
-                "category_obj": "",
-                "split_rule": "",
-                "receiver": "Superstore",
-                "parts-0-amount": "60.00",
-                "parts-0-category_obj": str(self.sports.pk),
-                "parts-1-amount": "40.00",
-                "parts-1-category_obj": str(self.utilities.pk),
-                **self._formset_management(total_forms=2),
-            },
-            follow=True,
-        )
-
-        self.assertRedirects(response, reverse("expense_list"))
-        expenses = list(Expense.objects.filter(user=self.user).order_by("amount"))
-        self.assertEqual(len(expenses), 2)
-        self.assertEqual(expenses[0].amount, Decimal("-60.00"))
-        self.assertEqual(expenses[0].category_obj, self.sports)
-        self.assertEqual(expenses[1].amount, Decimal("-40.00"))
-        self.assertEqual(expenses[1].category_obj, self.utilities)
-
-    def test_split_amounts_cannot_exceed_expense_amount(self):
-        response = self.client.post(
-            reverse("expense_add"),
-            {
-                "date": "2026-03-09",
-                "description": "Too much split",
-                "amount": "-100.00",
-                "category_obj": str(self.general.pk),
-                "split_rule": "",
-                "receiver": "Superstore",
-                "parts-0-amount": "80.00",
-                "parts-0-category_obj": str(self.sports.pk),
-                "parts-1-amount": "30.00",
-                "parts-1-category_obj": str(self.utilities.pk),
-                **self._formset_management(total_forms=2),
-            },
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Split amounts cannot exceed the expense amount.")
-        self.assertFalse(Expense.objects.filter(description="Too much split").exists())
-
-    def test_split_from_edit_creates_new_expenses(self):
-        expense = Expense.objects.create(
-            user=self.user,
-            date=date(2026, 3, 9),
-            category=self.general.name,
-            category_obj=self.general,
-            amount="-100.00",
-            receiver="Superstore",
-            description="Editable split",
-        )
-
-        response = self.client.post(
-            reverse("expense_edit", args=[expense.pk]),
-            {
-                "date": "2026-03-09",
-                "description": "Editable split",
-                "amount": "-100.00",
-                "category_obj": str(self.general.pk),
-                "split_rule": "",
-                "receiver": "Superstore",
-                "month": "all",
-                "parts-0-amount": "40.00",
-                "parts-0-category_obj": str(self.utilities.pk),
-                **self._formset_management(total_forms=1),
-            },
-            follow=True,
-        )
-
-        self.assertRedirects(response, f"{reverse('expense_list')}?month=all")
-        self.assertEqual(Expense.objects.filter(user=self.user).count(), 2)
-
-        expense.refresh_from_db()
-        self.assertEqual(expense.amount, Decimal("-60.00"))
-        self.assertEqual(expense.category_obj, self.general)
-
-        new_expense = Expense.objects.get(category_obj=self.utilities, user=self.user)
-        self.assertEqual(new_expense.amount, Decimal("-40.00"))
-
-    def test_split_expenses_update_savings_and_spending_totals(self):
-        self.client.post(
-            reverse("expense_add"),
-            {
-                "date": "2026-03-09",
-                "description": "Split savings",
-                "amount": "-100.00",
-                "category_obj": str(self.general.pk),
-                "split_rule": "",
-                "receiver": "Superstore",
-                "parts-0-amount": "20.00",
-                "parts-0-category_obj": str(self.savings.pk),
-                **self._formset_management(total_forms=1),
-            },
-        )
-
-        response = self.client.get(reverse("expense_list"), {"month": "all"})
-
-        self.assertEqual(response.context["total_spent"], Decimal("-80.00"))
-        self.assertEqual(response.context["savings_total"], Decimal("20.00"))
-
-    def test_split_expenses_show_as_independent_rows(self):
-        self.client.post(
-            reverse("expense_add"),
-            {
-                "date": "2026-03-09",
-                "description": "Rendered split",
-                "amount": "-100.00",
-                "category_obj": str(self.general.pk),
-                "split_rule": "",
-                "receiver": "Superstore",
-                "parts-0-amount": "30.00",
-                "parts-0-category_obj": str(self.sports.pk),
-                "parts-1-amount": "20.00",
-                "parts-1-category_obj": str(self.utilities.pk),
-                **self._formset_management(total_forms=2),
-            },
-        )
-
-        response = self.client.get(reverse("expense_list"), {"month": "all"})
-
-        rows = response.context["expense_rows"]
-        self.assertEqual(len(rows), 3)
-        categories = sorted([row.category_name for row in rows])
-        self.assertEqual(categories, ["General", "Sports", "Utilities"])
-        self.assertNotContains(response, "rowspan")
-        self.assertNotContains(response, "Split #")
+    assert response.status_code == 201
+    listing = client.get(url, {"month": "all"}).json()
+    rows = listing["rows"]
+    assert len(rows) == len({row["id"] for row in rows}) == len(expected)
+    assert {row["category"]["name"]: row["amount"] for row in rows} == expected
+    assert {(row["date"], row["receiver"]) for row in rows} == {("2026-03-09", "Superstore")}
+    if "Savings" in expected:
+        assert listing["summary"]["total_spent"] == "-80.00"
+        assert listing["summary"]["savings_total"] == "20.00"
 
 
 class CategoryManagementTests(TestCase):
@@ -934,18 +389,18 @@ class CategoryManagementTests(TestCase):
     def test_user_can_edit_seeded_default_category(self):
         category = Category.objects.get(user=self.user, name="Savings")
 
-        response = self.client.post(
-            reverse("category_edit", args=[category.pk]),
+        response = self.client.put(
+            reverse("api:category-detail", args=[category.pk]),
             {
                 "name": "Emergency Fund",
-                "parent": "",
+                "parent_id": None,
                 "category_type": Category.CATEGORY_TYPE_SAVING,
                 "keywords": "save,emergency",
             },
-            follow=True,
+            content_type="application/json",
         )
 
-        self.assertRedirects(response, reverse("category_list"))
+        self.assertEqual(response.status_code, 200)
         category.refresh_from_db()
         self.assertEqual(category.name, "Emergency Fund")
         self.assertEqual(category.keywords, "save,emergency")
@@ -953,12 +408,9 @@ class CategoryManagementTests(TestCase):
     def test_user_can_delete_seeded_default_category(self):
         category = Category.objects.get(user=self.user, name="Transfers")
 
-        response = self.client.post(
-            reverse("category_delete", args=[category.pk]),
-            follow=True,
-        )
+        response = self.client.delete(reverse("api:category-detail", args=[category.pk]))
 
-        self.assertRedirects(response, reverse("category_list"))
+        self.assertEqual(response.status_code, 204)
         self.assertFalse(Category.objects.filter(pk=category.pk).exists())
         self.assertTrue(
             Category.objects.filter(
@@ -968,184 +420,58 @@ class CategoryManagementTests(TestCase):
             ).exists()
         )
 
-    def test_category_list_shows_single_user_owned_section(self):
-        response = self.client.get(reverse("category_list"))
+@pytest.fixture
+def category_form_account(db):
+    owner = User.objects.create_user(username="keyword-owner")
+    Category.objects.filter(user=owner).delete()
+    food = Category.objects.create(user=owner, name="Food", keywords="lidl,prisma")
+    Category.objects.create(user=owner, name="Hypermarkets", parent=food, keywords="citymarket")
+    Category.objects.create(user=owner, name="Fuel", keywords="neste,abc")
+    other = User.objects.create_user(username="other-keyword-owner")
+    Category.objects.create(user=other, name="Private", keywords="uber")
+    return owner, food
 
-        self.assertContains(response, "My Categories")
-        self.assertNotContains(response, "System Categories")
 
+@pytest.mark.parametrize(
+    ("instance_name", "submitted", "conflicts"),
+    [
+        ("", "lidl,k-market", ["'lidl' is already used by category 'Food'"]),
+        ("", "citymarket", ["'citymarket' is already used by category 'Hypermarkets'"]),
+        ("", "LIDL", ["'lidl' is already used by category 'Food'"]),
+        ("", "lidl,neste", ["'lidl' is already used by category 'Food'", "'neste' is already used by category 'Fuel'"]),
+        ("Travel", "uber,taxi,lidl", ["'lidl' is already used by category 'Food'"]),
+        ("Food", "lidl,prisma,k-market", []),
+        ("", "train,taxi", []),
+        ("", "uber", []),
+    ],
+    ids=[
+        "different-category", "descendant", "case-insensitive", "multiple-conflicts",
+        "edit-conflict", "keep-own-keywords", "unique", "other-user",
+    ],
+)
+def test_keyword_validation_is_scoped_to_other_categories_of_current_user(
+    category_form_account, instance_name, submitted, conflicts
+):
+    owner, food = category_form_account
+    if instance_name == "Food":
+        instance = food
+    elif instance_name == "Travel":
+        instance = Category.objects.create(user=owner, name=instance_name, keywords="uber,taxi")
+    else:
+        instance = Category(user=owner)
+    form = CategoryForm(
+        {"name": instance_name or "Transit", "category_type": "expense", "keywords": submitted},
+        instance=instance,
+        user=owner,
+    )
 
-class CategoryDuplicateKeywordTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(username="kw-test-user", password="pass")
-        self.client.force_login(self.user)
-        # Clear any seeded categories to avoid keyword collisions with defaults
-        Category.objects.filter(user=self.user).delete()
-
-        self.food_cat = Category.objects.create(
-            user=self.user,
-            name="Food",
-            category_type=Category.CATEGORY_TYPE_EXPENSE,
-            keywords="lidl,prisma",
-        )
-
-    def test_unique_keywords_succeed(self):
-        """Creating a category with keywords not used elsewhere should succeed."""
-        response = self.client.post(
-            reverse("category_add"),
-            {
-                "name": "Transport",
-                "parent": "",
-                "category_type": Category.CATEGORY_TYPE_EXPENSE,
-                "keywords": "uber,taxi",
-            },
-            follow=True,
-        )
-        self.assertRedirects(response, reverse("category_list"))
-        self.assertTrue(Category.objects.filter(user=self.user, name="Transport").exists())
-
-    def test_duplicate_keyword_blocked(self):
-        """Creating a category with a keyword already on another category should fail."""
-        response = self.client.post(
-            reverse("category_add"),
-            {
-                "name": "Supermarkets",
-                "parent": "",
-                "category_type": Category.CATEGORY_TYPE_EXPENSE,
-                "keywords": "lidl,k-market",
-            },
-        )
-        self.assertEqual(response.status_code, 200)  # Re-renders form, not redirect
-        form = response.context["form"]
-        self.assertTrue(form.errors.get("keywords"))
-        self.assertIn("lidl", form.errors["keywords"][0])
-        self.assertIn("Food", form.errors["keywords"][0])
-
-    def test_editing_own_keywords_allowed(self):
-        """Editing a category and keeping its existing keywords should succeed."""
-        response = self.client.post(
-            reverse("category_edit", args=[self.food_cat.pk]),
-            {
-                "name": "Food",
-                "parent": "",
-                "category_type": Category.CATEGORY_TYPE_EXPENSE,
-                "keywords": "lidl,prisma,k-market",
-            },
-            follow=True,
-        )
-        self.assertRedirects(response, reverse("category_list"))
-        self.food_cat.refresh_from_db()
-        self.assertEqual(self.food_cat.keywords, "lidl,prisma,k-market")
-
-    def test_descendant_keyword_conflict_detected(self):
-        """A keyword on a subcategory of another category should trigger a conflict."""
-        sub_cat = Category.objects.create(
-            user=self.user,
-            name="Hypermarkets",
-            parent=self.food_cat,
-            category_type=Category.CATEGORY_TYPE_EXPENSE,
-            keywords="citymarket",
-        )
-
-        response = self.client.post(
-            reverse("category_add"),
-            {
-                "name": "Shopping",
-                "parent": "",
-                "category_type": Category.CATEGORY_TYPE_EXPENSE,
-                "keywords": "citymarket",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        form = response.context["form"]
-        self.assertTrue(form.errors.get("keywords"))
-        self.assertIn("citymarket", form.errors["keywords"][0])
-        self.assertIn("Hypermarkets", form.errors["keywords"][0])
-
-    def test_case_insensitive_conflict(self):
-        """Keyword matching should be case-insensitive."""
-        response = self.client.post(
-            reverse("category_add"),
-            {
-                "name": "Markets",
-                "parent": "",
-                "category_type": Category.CATEGORY_TYPE_EXPENSE,
-                "keywords": "LIDL",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        form = response.context["form"]
-        self.assertTrue(form.errors.get("keywords"))
-
-    def test_multiple_conflicts_reported(self):
-        """Multiple conflicting keywords should all appear in the error message."""
-        Category.objects.create(
-            user=self.user,
-            name="Fuel",
-            category_type=Category.CATEGORY_TYPE_EXPENSE,
-            keywords="neste,abc",
-        )
-
-        response = self.client.post(
-            reverse("category_add"),
-            {
-                "name": "Everything",
-                "parent": "",
-                "category_type": Category.CATEGORY_TYPE_EXPENSE,
-                "keywords": "lidl,neste",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        form = response.context["form"]
-        self.assertTrue(form.errors.get("keywords"))
-        error_text = form.errors["keywords"][0]
-        self.assertIn("lidl", error_text)
-        self.assertIn("neste", error_text)
-
-    def test_no_conflict_with_other_users_keywords(self):
-        """Keywords from other users should not cause conflicts."""
-        other_user = User.objects.create_user(username="other-user", password="pass")
-        Category.objects.create(
-            user=other_user,
-            name="Other Food",
-            category_type=Category.CATEGORY_TYPE_EXPENSE,
-            keywords="uber",
-        )
-
-        response = self.client.post(
-            reverse("category_add"),
-            {
-                "name": "Transport",
-                "parent": "",
-                "category_type": Category.CATEGORY_TYPE_EXPENSE,
-                "keywords": "uber",
-            },
-            follow=True,
-        )
-        self.assertRedirects(response, reverse("category_list"))
-
-    def test_editing_category_with_stolen_keyword_blocked(self):
-        """Editing a category to add a keyword from another category should fail."""
-        transport = Category.objects.create(
-            user=self.user,
-            name="Transport",
-            category_type=Category.CATEGORY_TYPE_EXPENSE,
-            keywords="uber,taxi",
-        )
-
-        response = self.client.post(
-            reverse("category_edit", args=[transport.pk]),
-            {
-                "name": "Transport",
-                "parent": "",
-                "category_type": Category.CATEGORY_TYPE_EXPENSE,
-                "keywords": "uber,taxi,lidl",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        form = response.context["form"]
-        self.assertTrue(form.errors.get("keywords"))
-        self.assertIn("lidl", form.errors["keywords"][0])
+    assert form.is_valid() is (not conflicts)
+    if conflicts:
+        assert set(form.errors) == {"keywords"}
+        for message in conflicts:
+            assert message in form.errors["keywords"][0]
+    else:
+        assert form.save().keywords == submitted
 
 
 class ExpenseAnalyticsTests(TestCase):
@@ -1183,17 +509,17 @@ class ExpenseAnalyticsTests(TestCase):
             receiver="February store",
         )
 
-        response = self.client.get(reverse("expenses_per_month"), {"month": "2026-03"})
+        response = self.client.get(reverse("api:analytics"), {"month": "2026-03"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["active_month_label"], "March 2026")
-        self.assertEqual(response.context["prev_month_str"], "2026-02")
-        self.assertEqual(response.context["next_month_str"], "2026-04")
-        self.assertContains(response, "March Pie Category")
-        self.assertNotContains(response, "February Pie Category")
-
-        years = [item["year"] for item in response.context["yearly_summary"]]
-        self.assertEqual(years, [2026])
+        data = response.json()
+        category = data["category"]
+        self.assertEqual(
+            (category["label"], category["previous"], category["next"]),
+            ("March 2026", "2026-02", "2026-04"),
+        )
+        self.assertEqual([row["name"] for row in category["rows"]], ["March Pie Category"])
+        self.assertEqual(data["yearly"], [{"year": 2026, "total_spent": "50.00"}])
 
     def test_split_expenses_contribute_to_monthly_analytics(self):
         general = Category.objects.create(
@@ -1223,13 +549,13 @@ class ExpenseAnalyticsTests(TestCase):
             receiver="Sports shop",
         )
 
-        response = self.client.get(reverse("expenses_per_month"), {"month": "2026-03"})
+        response = self.client.get(reverse("api:analytics"), {"month": "2026-03"})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Sports")
-        self.assertContains(response, "General")
-        march_summary = next(
-            item for item in response.context["yearly_summary"]
-            if item["year"] == 2026
+        data = response.json()
+        self.assertEqual(data["monthly"], [{"month": "2026-03", "total_spent": "100.00"}])
+        self.assertEqual(data["yearly"], [{"year": 2026, "total_spent": "100.00"}])
+        self.assertEqual(
+            [(row["name"], row["amount"]) for row in data["category"]["rows"]],
+            [("General", "70.00"), ("Sports", "30.00")],
         )
-        self.assertEqual(march_summary["total_spent"], Decimal("100.00"))

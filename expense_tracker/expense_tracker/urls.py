@@ -15,10 +15,20 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path,include
 from django.contrib.auth import views as auth_views
-from expenses import views as expense_views  # for signup
+from django.http import HttpRequest, HttpResponse
+from django.middleware.csrf import rotate_token
 from django.shortcuts import redirect
+from django.urls import include, path
+from expenses.react_pages import auth_host
+
+
+class AppLogoutView(auth_views.LogoutView):
+    def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
+        response = super().post(request, *args, **kwargs)
+        rotate_token(request)
+        return response
+
 
 def home(request):
     if request.user.is_authenticated:
@@ -28,11 +38,12 @@ def home(request):
 urlpatterns = [
     path('', home),
     path('admin/', admin.site.urls),
+    path('api/', include('expenses.api_urls')),
 
     path('expenses/', include('expenses.urls')),
 
     # Auth URLs
-    path('login/', auth_views.LoginView.as_view(template_name='login.html'), name='login'),
-    path('logout/', auth_views.LogoutView.as_view(next_page='login'), name='logout'),
-    path('signup/', expense_views.signup, name='signup'),
+    path("login/", auth_host, {"screen": "login"}, name="login"),
+    path("logout/", AppLogoutView.as_view(next_page="login"), name="logout"),
+    path("signup/", auth_host, {"screen": "signup"}, name="signup"),
 ]

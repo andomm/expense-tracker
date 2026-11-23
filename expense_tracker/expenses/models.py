@@ -158,13 +158,14 @@ class Expense(models.Model):
     )
     receiver = models.CharField(max_length=100, blank=True)
 
-    def save(self, *args, **kwargs):
-        # Auto-calculate user_share if split rule is set
+    def share_for_save(self) -> Decimal:
         if self.split_rule:
-            self.user_share = self.amount * (self.split_rule.split_percentage / 100)
-        elif self.user_share is None:
-            # Default to full amount if no split rule
-            self.user_share = self.amount
+            return self.amount * (self.split_rule.split_percentage / 100)
+        # Preserve existing behavior for previously stored shares without a rule.
+        return self.get_effective_user_amount()
+
+    def save(self, *args, **kwargs):
+        self.user_share = self.share_for_save()
         super().save(*args, **kwargs)
 
     def __str__(self):

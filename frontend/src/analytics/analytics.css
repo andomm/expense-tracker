@@ -1,0 +1,21 @@
+.analytics {
+  --chart-spending: #3b7b65;
+  --chart-cumulative: #9f5b18;
+  --chart-income: #287767;
+  --chart-expenses: #a4415e;
+  --chart-balance: #495fb0;
+  --chart-blue: #2c6a96;
+  --chart-olive: #70732d;
+  --chart-ochre: #a05636;
+}
+
+.dark .analytics {
+  --chart-spending: #82c5a6;
+  --chart-cumulative: #f6b66e;
+  --chart-income: #6dd1b9;
+  --chart-expenses: #f68cab;
+  --chart-balance: #a5b6ff;
+  --chart-blue: #82c5e6;
+  --chart-olive: #cad37c;
+  --chart-ochre: #e9a587;
+}
