@@ -384,17 +384,10 @@ def test_storage_failure_rolls_back_remainder_and_earlier_parts(writer, payload)
     assert [(item["id"], item["amount"]) for item in rows] == [(pk, "-100.00")]
 
 
-def test_local_add_and_edit_use_react_unless_legacy_fallback_is_set(
-    writer, owner, other, settings
-):
+def test_add_and_edit_pages_keep_local_filters_and_enforce_ownership(writer, owner, other):
     own = Expense.objects.create(user=owner, date="2026-01-01", amount="-1.00")
     foreign = Expense.objects.create(user=other, date="2026-01-01", amount="-2.00")
     routes = (reverse("expense_add"), reverse("expense_edit", args=[own.pk]))
-    settings.DEBUG = settings.LOCAL_REACT_DEV = settings.LEGACY_PAGES = True
-    for path in routes:
-        assert writer.get(path).templates[0].name == "expenses/expense_form.html"
-
-    settings.LEGACY_PAGES = False
     for path in routes:
         response = writer.get(
             path, {"month": "all", "search": "market", "next": "//example.com"}

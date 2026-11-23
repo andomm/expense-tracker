@@ -137,7 +137,6 @@ def _descendant_ids(root_id: int, categories: Iterable[Category]) -> set[int]:
 @dataclass(frozen=True)
 class ExpenseList:
     rows: list[ExpenseListRow]
-    active_category: str | None
 
     def summary(self) -> dict[str, Decimal]:
         return summarize_allocations(row.allocation for row in self.rows)
@@ -161,7 +160,7 @@ class ExpenseList:
 def read_expense_list(
     user: User, filters: ExpenseFilters, categories: list[Category]
 ) -> ExpenseList:
-    """Shared legacy/API read: a visible row represents one nonzero source expense."""
+    """A visible row represents one nonzero source expense."""
     queryset = (
         Expense.objects.filter(user=user)
         .exclude(amount=0)
@@ -190,15 +189,10 @@ def read_expense_list(
 
     owned_categories = {str(category.pk): category for category in categories}
     selected = owned_categories.get(filters.category_filter)
-    active_category = None
     if selected:
         category_ids = _descendant_ids(selected.pk, categories)
-        active_category = selected.name + (
-            " (+ subcategories)" if len(category_ids) > 1 else ""
-        )
         queryset = queryset.filter(category_obj_id__in=category_ids)
     elif filters.category_filter == UNCATEGORIZED_SENTINEL:
-        active_category = "Uncategorized"
         queryset = queryset.exclude(category_obj__user=user)
 
     rows = []
@@ -220,4 +214,4 @@ def read_expense_list(
         ):
             continue
         rows.append(row)
-    return ExpenseList(rows, active_category)
+    return ExpenseList(rows)

@@ -124,7 +124,7 @@ def _bind_forms(
         row_data[f"parts-{index}-amount"] = text(row, "amount")
         row_data[f"parts-{index}-category_obj"] = choice(row, "category_id")
 
-    kwargs = {"user": expense.user, "show_choices": False}
+    kwargs = {"user": expense.user}
     fields = (
         {}
         if preview

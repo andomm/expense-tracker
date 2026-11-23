@@ -1,5 +1,3 @@
-import json
-import re
 from datetime import date
 from decimal import Decimal
 
@@ -8,7 +6,6 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 
 from .models import Category, Expense
-
 
 INCOME = Category.CATEGORY_TYPE_INCOME
 SAVING = Category.CATEGORY_TYPE_SAVING
@@ -55,23 +52,9 @@ def transactions(accounts):
     Expense.objects.create(user=other, date=date(2026, 1, 3), amount=Decimal("-9876.54"))
 
 
-def plotly_figure(html: str) -> tuple[list[dict], dict]:
-    # The arguments are chart ID, trace array, layout, and config.
-    match = re.search(r'Plotly\.newPlot\(\s*"[^"]+",\s*', html)
-    assert match is not None
-    decoder = json.JSONDecoder(parse_float=Decimal)
-    traces, end = decoder.raw_decode(html[match.end():])
-    layout, _ = decoder.raw_decode(html[match.end() + end:].lstrip(", "))
-    return traces, layout
-
-
-def test_analytics_api_and_legacy_match_on_the_same_transactions(client, transactions, settings):
-    settings.LEGACY_PAGES = True
-    params = {"month": "2026-01"}
-    response = client.get(reverse("api:analytics"), params)
-    legacy = client.get(reverse("expenses_per_month"), params)
-
-    assert response.status_code == legacy.status_code == 200
+def test_analytics_series_match_verified_migration_fixture(client, transactions):
+    response = client.get(reverse("api:analytics"), {"month": "2026-01"})
+    assert response.status_code == 200
     data = response.json()
     assert data["daily"] == [
         {"date": "2025-12-29", "daily": "30.20", "cumulative": "30.20"},
@@ -105,29 +88,6 @@ def test_analytics_api_and_legacy_match_on_the_same_transactions(client, transac
         {"year": 2026, "total_spent": "6.00"},
     ]
 
-    for graph, group, period, keys in [
-        ("cumulative_graph", "daily", "date", ["daily", "cumulative"]),
-        ("monthly_comparison", "monthly", "month", ["total_spent"]),
-        ("income_vs_expenses", "cash_flow", "date", ["expenses", "income", "balance"]),
-    ]:
-        traces, _ = plotly_figure(legacy.context[graph])
-        labels = [row[period] for row in data[group]]
-        if period == "month":
-            labels = [date.fromisoformat(month + "-01").strftime("%b %Y") for month in labels]
-        assert [(trace["x"], trace["y"]) for trace in traces] == [
-            (labels, [Decimal(row[key]) for row in data[group]]) for key in keys
-        ]
-
-    [pie], layout = plotly_figure(legacy.context["category_breakdown"])
-    assert list(zip(pie["labels"], pie["values"], strict=True)) == [
-        (row["name"], Decimal(row["amount"])) for row in data["category"]["rows"]
-    ]
-    assert layout["annotations"][0]["text"] == "Total<br><b>€18.00</b>"
-    assert pie["text"] == [f"{row['percent']}%" for row in data["category"]["rows"]]
-    assert [(row["year"], row["total_spent"]) for row in legacy.context["yearly_summary"]] == [
-        (row["year"], Decimal(row["total_spent"])) for row in data["yearly"]
-    ]
-
 
 @pytest.mark.parametrize(
     ("month", "previous", "next_month", "rows"),
@@ -138,9 +98,8 @@ def test_analytics_api_and_legacy_match_on_the_same_transactions(client, transac
     ids=["zero-net-spending", "no-spending"],
 )
 def test_month_changes_only_category_and_preserves_zero_vs_empty(
-    client, transactions, settings, month, previous, next_month, rows
+    client, transactions, month, previous, next_month, rows
 ):
-    settings.LEGACY_PAGES = True
     url = reverse("api:analytics")
     january = client.get(url, {"month": "2026-01"}).json()
     selected = client.get(url, {"month": month}).json()
@@ -150,11 +109,6 @@ def test_month_changes_only_category_and_preserves_zero_vs_empty(
     assert selected == january
     assert (category["month"], category["previous"], category["next"]) == (month, previous, next_month)
     assert (category["rows"], category["total"]) == (rows, "0.00")
-    legacy = client.get(reverse("expenses_per_month"), {"month": month})
-    traces, layout = plotly_figure(legacy.context["category_breakdown"])
-    assert [trace["values"] for trace in traces] == ([[0]] if rows else [])
-    expected = "Total<br><b>€0.00</b>" if rows else "No category data for the selected month."
-    assert layout["annotations"][0]["text"] == expected
 
 
 def test_current_month_disables_next_and_invalid_month_falls_back(client, accounts):
@@ -204,29 +158,13 @@ def test_zero_personal_share_counts_as_a_recorded_zero_in_all_groups(client, acc
     assert data["yearly"] == [{"year": 2026, "total_spent": "0.00"}]
 
 
-@pytest.mark.parametrize(
-    ("local", "legacy", "debug", "react"),
-    [
-        (True, False, True, True),
-        (True, True, True, False),
-        (False, False, True, False),
-        (True, False, False, False),
-    ],
-    ids=["default-react", "fallback", "plain-django", "debug-disabled"],
-)
-def test_analytics_route_is_explicit(client, accounts, settings, local, legacy, debug, react):
-    settings.LOCAL_REACT_DEV, settings.LEGACY_PAGES, settings.DEBUG = local, legacy, debug
+def test_analytics_route_preserves_month_on_sign_in(client, accounts):
     url = reverse("expenses_per_month")
     response = client.get(url, {"month": "2026-01"})
     assert response.status_code == 200
-    assert response.templates[0].name == (
-        "react_host.html" if react else "expenses/expenses_per_month.html"
-    )
-    assert (b"cdn.plot.ly" in response.content) is (not react)
-    if react:
-        assert response.context["app"]["screen"] == "analytics"
-        assert response.context["app"]["analyticsApi"] == reverse("api:analytics")
-        assert "no-store" in response.headers["Cache-Control"]
+    assert response.context["app"]["screen"] == "analytics"
+    assert response.context["app"]["analyticsApi"] == reverse("api:analytics")
+    assert "no-store" in response.headers["Cache-Control"]
 
     client.logout()
     assert client.get(url, {"month": "2026-01"}).url == "/login/?next=/expenses/expenses-per-month/%3Fmonth%3D2026-01"

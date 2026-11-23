@@ -31,12 +31,12 @@ def make_category(accounts):
     return make
 
 
-def test_tree_matches_legacy_root_totals_without_exposing_other_categories(
-    account_client, accounts, make_category, settings
+def test_tree_preserves_root_totals_without_exposing_other_categories(
+    account_client, accounts, make_category
 ):
     root = make_category("Travel", keywords="Rail, rail")
     child = make_category("Local", parent=root, keywords="bus, RAIL")
-    leaf = make_category("Trams", parent=child, keywords="tram, bus")
+    make_category("Trams", parent=child, keywords="tram, bus")
     make_category("Other user's branch", owner=accounts[1], parent=root, keywords="secret")
     make_category("Other user's root", owner=accounts[1])
     make_category("Income", category_type="income")
@@ -53,11 +53,6 @@ def test_tree_matches_legacy_root_totals_without_exposing_other_categories(
         ("Local", root.pk, "expense", 2),
         ("Trams", child.pk, "expense", 2),
     ]
-    settings.LEGACY_PAGES = True
-    legacy = account_client.get(reverse("category_list")).context["category_groups"]
-    assert legacy[1]["parent_keyword_count"] == 3
-    assert legacy[1]["parent_keywords_full"] == "rail, bus, tram"
-    assert [entry["category"].pk for entry in legacy[1]["children"]] == [child.pk, leaf.pk]
 
 
 def test_form_parent_choices_leave_room_for_the_whole_subtree(accounts, make_category):
@@ -230,30 +225,21 @@ def test_category_writes_require_csrf_and_reject_an_expired_session(
     assert not Category.objects.filter(user=accounts[0]).exists()
 
 
-@pytest.mark.parametrize(
-    ("local", "debug", "legacy", "react"),
-    [(True, True, False, True), (True, True, True, False),
-     (False, True, False, False), (True, False, False, False)],
-    ids=["default", "fallback", "plain-django", "debug-disabled"],
-)
-def test_only_explicit_category_crud_pages_migrate(
-    account_client, accounts, make_category, settings, local, debug, legacy, react
-):
-    settings.LOCAL_REACT_DEV = local
-    settings.DEBUG = debug
-    settings.LEGACY_PAGES = legacy
+def test_explicit_category_pages_use_react_and_scope_details(account_client, accounts, make_category):
     owned = make_category("Travel")
     foreign = make_category("Private", owner=accounts[1])
+    token = account_client.get(reverse("api:session")).json()["csrf_token"]
     pages = [
-        ("category_list", [], "category_list", "categories"),
-        ("category_add", [], "category_form", "category-add"),
-        ("category_edit", [owned.pk], "category_form", "category-edit"),
-        ("category_delete", [owned.pk], "category_confirm_delete", "category-delete"),
+        ("category_list", [], "categories"),
+        ("category_add", [], "category-add"),
+        ("category_edit", [owned.pk], "category-edit"),
+        ("category_delete", [owned.pk], "category-delete"),
     ]
-    for path_name, args, template, screen in pages:
-        response = account_client.get(reverse(path_name, args=args))
-        assert response.templates[0].name == ("react_host.html" if react else f"expenses/{template}.html")
-        if react:
-            assert response.context["app"]["screen"] == screen
+    for path_name, args, screen in pages:
+        url = reverse(path_name, args=args)
+        response = account_client.get(url)
+        assert response.status_code == 200
+        assert response.context["app"]["screen"] == screen
+        assert account_client.post(url, {"csrfmiddlewaretoken": token}).status_code == 405
     for path_name in ("category_edit", "category_delete"):
         assert account_client.get(reverse(path_name, args=[foreign.pk])).status_code == 404

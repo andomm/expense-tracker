@@ -3,15 +3,8 @@ from decimal import Decimal
 
 from django import forms
 from django.forms import BaseFormSet, formset_factory
-from django.db import models
 
-from .models import (
-    Expense,
-    Category,
-    ExpenseSplitRule,
-    MAX_CATEGORY_DEPTH,
-)
-
+from .models import MAX_CATEGORY_DEPTH, Category, Expense, ExpenseSplitRule
 
 UNCATEGORIZED_SENTINEL = "uncategorized"
 
@@ -28,17 +21,8 @@ def get_user_category_queryset(user):
     )
 
 
-def _flatten_category_tree(
-    categories: list,
-    *,
-    exclude_id: int | None = None,
-    exclude_descendant_ids: set[int] | None = None,
-) -> list[tuple]:
-    """
-    Return a flat list of (category, depth) pairs ordered so each parent
-    is immediately followed by all its children (recursively), alphabetically
-    within each level. Optionally exclude a category and its descendants.
-    """
+def _flatten_category_tree(categories) -> list[tuple[Category, int]]:
+    """List parents before children, alphabetically within each level."""
     by_parent: dict[int | None, list] = {}
     for cat in categories:
         pid = cat.parent_id
@@ -47,18 +31,10 @@ def _flatten_category_tree(
     for children in by_parent.values():
         children.sort(key=lambda c: c.name.lower())
 
-    excluded = set()
-    if exclude_id is not None:
-        excluded.add(exclude_id)
-    if exclude_descendant_ids:
-        excluded.update(exclude_descendant_ids)
-
-    result: list[tuple] = []
+    result: list[tuple[Category, int]] = []
 
     def traverse(parent_id, depth):
         for cat in by_parent.get(parent_id, []):
-            if cat.pk in excluded:
-                continue
             result.append((cat, depth))
             traverse(cat.pk, depth + 1)
 
@@ -71,15 +47,8 @@ def build_category_choices(
     *,
     empty_label=None,
     include_uncategorized=False,
-    exclude_id: int | None = None,
-    exclude_descendant_ids: set[int] | None = None,
 ):
     """Build a flat choice list with dash-prefixed labels showing depth."""
-    flat = _flatten_category_tree(
-        categories,
-        exclude_id=exclude_id,
-        exclude_descendant_ids=exclude_descendant_ids,
-    )
 
     choices = []
     if empty_label is not None:
@@ -87,7 +56,7 @@ def build_category_choices(
     if include_uncategorized:
         choices.append((UNCATEGORIZED_SENTINEL, "Uncategorized"))
 
-    for cat, depth in flat:
+    for cat, depth in _flatten_category_tree(categories):
         prefix = "— " * (depth - 1)
         choices.append((str(cat.pk), f"{prefix}{cat.name}"))
 
@@ -117,12 +86,6 @@ class SortForm(forms.Form):
             empty_label="All categories",
             include_uncategorized=True,
         )
-        self.fields["search"].widget.attrs.update(
-            {
-                "placeholder": "Search receiver, description, or category",
-                "class": "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900",
-            }
-        )
 
 
 class ExpenseForm(forms.ModelForm):
@@ -142,24 +105,12 @@ class ExpenseForm(forms.ModelForm):
     class Meta:
         model = Expense
         fields = ["date", "description", "amount", "split_rule", "receiver"]
-        widgets = {
-            "date": forms.DateInput(attrs={"type": "date"}),
-        }
 
-    def __init__(self, *args, user=None, show_choices=True, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        categories = get_user_category_queryset(user)
-        self.fields["category_obj"].queryset = categories
-        if show_choices:
-            self.fields["category_obj"].choices = build_category_choices(
-                categories, empty_label="---------"
-            )
+        self.fields["category_obj"].queryset = get_user_category_queryset(user)
         if user and user.is_authenticated:
             self.fields["split_rule"].queryset = ExpenseSplitRule.objects.filter(user=user)
-        # category_obj is not in Meta.fields so Django won't populate it from the
-        # instance automatically — set it explicitly when editing an existing expense.
-        if self.instance and self.instance.pk and self.instance.category_obj_id:
-            self.initial["category_obj"] = self.instance.category_obj_id
 
     def save(self, commit=True, *, clear_category=False):
         expense = super().save(commit=False)
@@ -170,39 +121,6 @@ class ExpenseForm(forms.ModelForm):
         if commit:
             expense.save()
         return expense
-
-
-class BulkCategoryUpdateForm(forms.Form):
-    expense_ids = forms.ModelMultipleChoiceField(
-        queryset=Expense.objects.none(),
-        required=True,
-        widget=forms.MultipleHiddenInput,
-        error_messages={"required": "Select at least one expense to update."},
-    )
-    category_obj = forms.ModelChoiceField(
-        queryset=Category.objects.none(),
-        required=True,
-        label="Change selected to",
-        error_messages={"required": "Select a category."},
-    )
-
-    def __init__(self, *args, user=None, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self.fields["expense_ids"].queryset = (
-            Expense.objects.filter(user=user)
-            if user and user.is_authenticated
-            else Expense.objects.none()
-        )
-
-        categories = list(get_user_category_queryset(user))
-        self.fields["category_obj"].queryset = get_user_category_queryset(user)
-        self.fields["category_obj"].choices = build_category_choices(categories)
-        self.fields["category_obj"].widget.attrs.update(
-            {
-                "class": "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900",
-            }
-        )
 
 
 class SplitRowForm(forms.Form):
@@ -217,12 +135,9 @@ class SplitRowForm(forms.Form):
         label="Split amount",
     )
 
-    def __init__(self, *args, user=None, show_choices=True, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        categories = get_user_category_queryset(user)
-        self.fields["category_obj"].queryset = categories
-        if show_choices:
-            self.fields["category_obj"].choices = build_category_choices(categories)
+        self.fields["category_obj"].queryset = get_user_category_queryset(user)
 
 
 class BaseSplitRowFormSet(BaseFormSet):
@@ -273,15 +188,6 @@ class CategoryForm(forms.ModelForm):
     class Meta:
         model = Category
         fields = ["name", "parent", "category_type", "keywords"]
-        help_text = "Create a category"
-        widgets = {
-            "keywords": forms.Textarea(
-                attrs={
-                    "rows": 3,
-                    "placeholder": "Comma-separated keywords for automatic matching (e.g., lidl,prisma,market)",
-                }
-            ),
-        }
 
     def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -386,7 +292,6 @@ class CSVUploadForm(forms.Form):
 
     file = forms.FileField(
         label="Select a CSV file",
-        widget=forms.ClearableFileInput(attrs={"accept": ".csv,text/csv"}),
     )
     import_format = forms.ChoiceField(
         choices=IMPORT_FORMAT_CHOICES,

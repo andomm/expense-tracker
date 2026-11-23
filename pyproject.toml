@@ -8,7 +8,6 @@ dependencies = [
     "debugpy>=1.8.20",
     "django>=5.2.7",
     "django-stubs[compatible-mypy]>=5.2.9",
-    "plotly>=6.4.0",
     "pytest-django>=4.12.0",
     "gunicorn>=22.0.0",
     "whitenoise>=6.6.0",

@@ -1,5 +1,3 @@
-from collections.abc import Callable
-from functools import wraps
 from urllib.parse import urlencode
 
 from django.conf import settings
@@ -26,10 +24,6 @@ def _session_routes() -> dict[str, str]:
     }
 
 
-def _react_enabled() -> bool:
-    return settings.DEBUG and settings.LOCAL_REACT_DEV and not settings.LEGACY_PAGES
-
-
 def _render_host(request: HttpRequest, app: dict, title: str) -> HttpResponse:
     return render(
         request,
@@ -38,23 +32,18 @@ def _render_host(request: HttpRequest, app: dict, title: str) -> HttpResponse:
     )
 
 
-def migrated_auth_page(screen: str, legacy: Callable[..., HttpResponse]):
-    @wraps(legacy)
-    @never_cache
-    def view(request: HttpRequest) -> HttpResponse:
-        if not (_react_enabled() and request.method in {"GET", "HEAD"}):
-            return legacy(request)
-        return _render_host(
-            request,
-            {
-                "screen": screen,
-                "urls": _session_routes(),
-                "next": safe_return_url(request.GET.get("next")),
-            },
-            "Sign in" if screen == "login" else "Create account",
-        )
-
-    return view
+@never_cache
+@require_safe
+def auth_host(request: HttpRequest, screen: str) -> HttpResponse:
+    return _render_host(
+        request,
+        {
+            "screen": screen,
+            "urls": _session_routes(),
+            "next": safe_return_url(request.GET.get("next")),
+        },
+        "Sign in" if screen == "login" else "Create account",
+    )
 
 
 TITLES = {
@@ -168,15 +157,3 @@ def _list_context_url(
     }
     url = reverse(name, args=args)
     return f"{url}?{urlencode(params)}" if params else url
-
-
-def migrated_page(screen: str, legacy: Callable[..., HttpResponse]):
-    """Serve one explicitly mapped React screen in the local dev runner."""
-
-    @wraps(legacy)
-    def view(request: HttpRequest, **kwargs) -> HttpResponse:
-        if _react_enabled():
-            return react_host(request, screen, **kwargs)
-        return legacy(request, **kwargs)
-
-    return view

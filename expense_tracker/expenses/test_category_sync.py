@@ -260,61 +260,17 @@ def test_preview_limits_never_limit_writes_or_counts(sync_accounts, expense):
         assert last.category_obj == category
 
 
-def test_retained_sync_form_redirects_to_legacy_report(
-    sync_accounts, expense, settings
-):
-    owner, _, client, _ = sync_accounts
-    settings.DEBUG = settings.LOCAL_REACT_DEV = settings.LEGACY_PAGES = True
-    Category.objects.create(user=owner, name="Groceries", keywords="market")
-    row = expense(receiver="Market")
-    categories = client.get(reverse("category_list"))
-    start = reverse("sync_categories")
-    result = reverse("sync_summary")
-    assert client.get(start).url == reverse("category_list")
-    assert f'action="{start}"' in categories.content.decode()
-    assert client.post(start).status_code == 403
-    token = client.get(reverse("api:session")).json()["csrf_token"]
-    assert client.post(start, {"csrfmiddlewaretoken": token}).url == result
-    response = client.get(result)
-    assert response.templates[0].name == "expenses/sync_summary.html"
-    assert "Groceries" in response.content.decode()
-    assert reverse("expense_edit", args=[row.pk]) in response.content.decode()
-    assert client.get(LATEST).json()["result"]["counts"]["newly_categorized"] == 1
-
-
-@pytest.mark.parametrize(
-    ("local", "debug", "legacy", "react"),
-    [
-        (True, True, False, True),
-        (True, True, True, False),
-        (False, True, False, False),
-        (True, False, False, False),
-    ],
-    ids=["default", "fallback", "plain-django", "debug-disabled"],
-)
-def test_sync_pages_move_together(sync_accounts, settings, local, debug, legacy, react):
+def test_sync_review_and_result_pages_are_read_only(sync_accounts):
     _, _, client, _ = sync_accounts
-    settings.LOCAL_REACT_DEV = local
-    settings.DEBUG = debug
-    settings.LEGACY_PAGES = legacy
-    start = client.get(reverse("sync_categories"))
-    summary = client.get(reverse("sync_summary"))
-    if react:
-        for response, screen in (
-            (start, "category-sync"),
-            (summary, "category-sync-result"),
-        ):
-            assert response.templates[0].name == "react_host.html"
-            assert response.context["app"]["screen"] == screen
-            assert "no-store" in response.headers["Cache-Control"]
-        token = client.get(reverse("api:session")).json()["csrf_token"]
-        assert (
-            client.post(
-                reverse("sync_categories"), {"csrfmiddlewaretoken": token}
-            ).status_code
-            == 405
-        )
-        assert client.get(LATEST).json() == {"result": None}
-    else:
-        assert start.url == reverse("category_list")
-        assert summary.templates[0].name == "expenses/sync_summary.html"
+    start = reverse("sync_categories")
+    for url, screen in (
+        (start, "category-sync"),
+        (reverse("sync_summary"), "category-sync-result"),
+    ):
+        response = client.get(url)
+        assert response.status_code == 200
+        assert response.context["app"]["screen"] == screen
+        assert "no-store" in response.headers["Cache-Control"]
+    token = client.get(reverse("api:session")).json()["csrf_token"]
+    assert client.post(start, {"csrfmiddlewaretoken": token}).status_code == 405
+    assert client.get(LATEST).json() == {"result": None}

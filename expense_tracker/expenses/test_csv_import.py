@@ -304,75 +304,20 @@ def test_multipart_rejects_unverified_and_unauthorized_requests(accounts):
     assert not Expense.objects.exists()
 
 
-def test_legacy_upload_uses_the_same_atomic_import_and_repeatable_result(
-    accounts, settings
-):
-    owner, _, client, _ = accounts
-    settings.DEBUG = settings.LOCAL_REACT_DEV = settings.LEGACY_PAGES = True
-    start, result = reverse("upload_csv"), reverse("import_summary")
-    assert "No import result in this session" in client.get(result).content.decode()
-    path = OP_HEADER + OP_ROW
-    assert upload(client, path, url=start).status_code == 403
-
-    def submit(data):
-        return client.post(
-            start,
-            {
-                "import_format": OP,
-                "file": SimpleUploadedFile("export.csv", data.encode()),
-                "csrfmiddlewaretoken": csrf(client),
-            },
-        )
-
-    bad = submit(path + "2024-02-30;;1;;private memo\n")
-    assert bad.status_code == 422 and "Row 3:" in bad.content.decode()
-    assert not Expense.objects.exists()
-    assert submit(path).url == result
-    edit = reverse("expense_edit", args=[Expense.objects.get(user=owner).pk])
-    for _ in range(2):
-        page = client.get(result)
-        assert page.templates[0].name == "expenses/import_summary.html"
-        assert edit in page.content.decode()
-        assert "no-store" in page.headers["Cache-Control"]
-    assert Expense.objects.count() == 1
-    assert client.get(LATEST).json()["result"]["counts"]["total"] == 1
-
-
-@pytest.mark.parametrize(
-    ("local", "debug", "legacy", "react"),
-    [
-        (True, True, False, True),
-        (True, True, True, False),
-        (False, True, False, False),
-        (True, False, False, False),
-    ],
-    ids=["default", "fallback", "plain-django", "debug-disabled"],
-)
-def test_upload_and_result_routes_move_together(
-    accounts, settings, local, debug, legacy, react
-):
+def test_upload_and_result_pages_are_read_only(accounts):
     _, _, client, _ = accounts
-    settings.LOCAL_REACT_DEV, settings.DEBUG, settings.LEGACY_PAGES = (
-        local,
-        debug,
-        legacy,
-    )
     start = reverse("upload_csv")
-    for url, screen, fallback in (
-        (start, "csv-upload", "expenses/upload_csv.html"),
-        (
-            reverse("import_summary"),
-            "csv-import-result",
-            "expenses/import_summary.html",
-        ),
+    for url, screen in (
+        (start, "csv-upload"),
+        (reverse("import_summary"), "csv-import-result"),
     ):
         response = client.get(url)
-        assert response.templates[0].name == ("react_host.html" if react else fallback)
-        if react:
-            assert response.context["app"]["screen"] == screen
-    if react:
-        response = upload(
-            client, OP_HEADER + OP_ROW, url=start, HTTP_X_CSRFTOKEN=csrf(client)
-        )
-        assert response.status_code == 405
-        assert not Expense.objects.exists()
+        assert response.status_code == 200
+        assert response.context["app"]["screen"] == screen
+        assert "no-store" in response.headers["Cache-Control"]
+    response = upload(
+        client, OP_HEADER + OP_ROW, url=start, HTTP_X_CSRFTOKEN=csrf(client)
+    )
+    assert response.status_code == 405
+    assert not Expense.objects.exists()
+    assert client.get(LATEST).json() == {"result": None}

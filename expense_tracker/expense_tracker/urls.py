@@ -22,8 +22,7 @@ from django.http import HttpRequest, HttpResponse
 from django.middleware.csrf import rotate_token
 from django.shortcuts import redirect
 from django.urls import include, path
-from expenses import views as expense_views
-from expenses.react_pages import migrated_auth_page
+from expenses.react_pages import auth_host
 from expenses.session_api import mark_logout
 
 
@@ -48,11 +47,7 @@ urlpatterns = [
     path('expenses/', include('expenses.urls')),
 
     # Auth URLs
-    path(
-        "login/",
-        migrated_auth_page("login", auth_views.LoginView.as_view(template_name="login.html")),
-        name="login",
-    ),
+    path("login/", auth_host, {"screen": "login"}, name="login"),
     path("logout/", AppLogoutView.as_view(next_page="login"), name="logout"),
-    path("signup/", migrated_auth_page("signup", expense_views.signup), name="signup"),
+    path("signup/", auth_host, {"screen": "signup"}, name="signup"),
 ]

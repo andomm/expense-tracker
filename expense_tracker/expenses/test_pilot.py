@@ -10,8 +10,8 @@ from .models import Category, Expense
 
 @pytest.fixture
 def make_expense(signed_in):
-    def make(*, owner=signed_in, day=date.today(), amount="-1.00", **fields):
-        return Expense.objects.create(user=owner, date=day, amount=amount, **fields)
+    def make(*, owner=signed_in, day=None, amount="-1.00", **fields):
+        return Expense.objects.create(user=owner, date=day or date.today(), amount=amount, **fields)
 
     return make
 
@@ -23,11 +23,7 @@ def signed_in(db, client):
     return user
 
 
-def test_local_expenses_defaults_to_react_without_capturing_other_routes(
-    signed_in, client, settings
-):
-    settings.DEBUG = settings.LOCAL_REACT_DEV = True
-    settings.LEGACY_PAGES = False
+def test_expenses_uses_react_without_capturing_other_routes(signed_in, client):
     response = client.get(
         reverse("expense_list"), {"month": "all", "search": "fresh bread"}
     )
@@ -37,6 +33,8 @@ def test_local_expenses_defaults_to_react_without_capturing_other_routes(
     assert client.get(reverse("admin:index")).url.startswith("/admin/login/")
     for path in (
         "/expenses/missing/",
+        "/expenses/bulk-category-update/",
+        "/expenses/bulk-delete/",
         "/api/missing/",
         "/static/missing/",
         "/media/missing/",
@@ -44,28 +42,7 @@ def test_local_expenses_defaults_to_react_without_capturing_other_routes(
         assert client.get(path).status_code == 404
 
 
-@pytest.mark.parametrize(
-    ("local", "legacy", "debug"),
-    [(False, False, True), (True, True, True), (True, False, False)],
-    ids=["plain-django", "legacy-fallback", "debug-disabled"],
-)
-def test_expense_list_keeps_legacy_outside_local_react_mode(
-    signed_in, client, settings, local, legacy, debug
-):
-    settings.LOCAL_REACT_DEV = local
-    settings.LEGACY_PAGES = legacy
-    settings.DEBUG = debug
-    assert (
-        client.get(reverse("expense_list")).templates[0].name
-        == "expenses/expense_list.html"
-    )
-
-
-def test_session_read_and_protected_page_preserve_legacy_login(
-    signed_in, client, settings
-):
-    settings.DEBUG = settings.LOCAL_REACT_DEV = True
-    settings.LEGACY_PAGES = False
+def test_session_read_and_protected_page_preserve_return_url(signed_in, client):
     path = reverse("expense_list") + "?search=fresh%20bread"
     status_url = reverse("api:session")
 
@@ -129,10 +106,6 @@ def test_pages_have_stable_ids_but_summary_and_top_cover_all_rows(
     top_ids = [largest.pk, second_largest.pk, *tied[:3]]
     assert [row["id"] for row in first["top_expenses"]] == top_ids
     assert first["top_expenses"] == second["top_expenses"]
-
-    legacy = client.get(reverse("expense_list"), {"month": "all"}).context
-    assert {key: f"{legacy[key]:.2f}" for key in first["summary"]} == first["summary"]
-    assert [row.expense.pk for row in legacy["top_expenses"]] == top_ids
 
 
 @pytest.mark.parametrize(
@@ -250,7 +223,7 @@ def test_rows_totals_picker_and_category_choices_are_account_scoped(
     assert other_result["summary"]["total_spent"] == "-222.00"
 
 
-def test_legacy_logout_requires_csrf_and_protected_api_returns_json_afterwards(
+def test_page_logout_requires_csrf_and_protected_api_returns_json_afterwards(
     signed_in,
 ):
     client = Client(enforce_csrf_checks=True)
@@ -277,14 +250,11 @@ def test_legacy_logout_requires_csrf_and_protected_api_returns_json_afterwards(
     assert "no-store" in response.headers["Cache-Control"]
 
 
-def test_filtered_link_keeps_search_with_local_legacy_fallback(
-    signed_in, client, settings, make_expense
-):
-    settings.DEBUG = settings.LOCAL_REACT_DEV = settings.LEGACY_PAGES = True
+def test_search_with_explicit_all_category(client, make_expense):
     match = make_expense(receiver="Corner shop")
     make_expense(receiver="Other store")
     response = client.get(
-        reverse("expense_list"),
+        reverse("api:expenses"),
         {
             "month": "all",
             "category_filter": "all",
@@ -292,7 +262,7 @@ def test_filtered_link_keeps_search_with_local_legacy_fallback(
             "order_by": "receiver",
         },
     )
-    assert [row.expense.pk for row in response.context["expense_rows"]] == [match.pk]
+    assert [row["id"] for row in response.json()["rows"]] == [match.pk]
 
 
 def test_invalid_page_is_json_error_and_empty_list_is_success(signed_in, client):

@@ -1,40 +1,21 @@
 # Expense Tracker
 
-A personal finance web app for tracking expenses and income, built with Django. Import transactions from your bank's CSV export, auto-categorize them, and visualize spending trends with interactive charts.
+A personal finance web app for tracking expenses and income, built with Django and React. Import transactions from your bank's CSV export, auto-categorize them, and visualize spending trends with interactive charts.
 
 > Personal project built while learning Django.
 
-## Screenshots
+## Features
 
-### Dashboard
-![Main View](pictures/main_view.png)
-
-The main dashboard shows **Total Spent**, **Income**, **Savings**, and **Balance** summary cards, a **Top Expenses** list, and a filterable transaction table with search, category, month, and year filters.
-
-### Adding Expenses
-![Add Expense](pictures/add_expense.png)
-
-Manually log transactions with date, description, amount, receiver, and category. Supports **Splitting Rules** for shared costs and per-transaction **Split Categories** to allocate amounts across multiple categories.
-
-### CSV Import
-![Upload CSV](pictures/upload.png)
-
-Bulk-import transactions from your bank's CSV export. Select your bank's file format and upload — transactions are auto-categorized based on your keyword rules.
-
-### Categories
-![Categories](pictures/categories.png)
-
-Define custom categories with keyword-based auto-categorization. Assign a type (Expense, Income, Saving, Transfer) and keywords to match incoming transactions. Use **Sync existing expenses** to re-apply rules to historical data.
-
-### Analytics
-![Analytics](pictures/analytics.png)
-
-Interactive Plotly charts showing daily vs. cumulative spending, monthly comparisons, spending by category, and cash flow over time. Includes a yearly summary table.
+- Filter transactions by date, category or search text. Review balances, totals and top expenses.
+- Add, edit and delete expenses. Set personal shares for shared expenses or split one transaction across categories.
+- Manage categories and keyword rules. Run category sync explicitly to apply rules to existing expenses.
+- Import OP or Spiir CSV files and review the import results.
+- Explore daily and monthly spending, category breakdowns, cash flow and yearly totals. Open chart data tables for exact amounts.
 
 ## Tech Stack
 
 - **Python 3.13** / **Django 5.2**
-- **Plotly 6.4** — interactive charts
+- **React** / **TypeScript** / **Vite** / **shadcn/ui** — screens and Recharts charts
 - **SQLite** — local database
 - **uv** — dependency management
 
@@ -44,7 +25,7 @@ Interactive Plotly charts showing daily vs. cumulative spending, monthly compari
 
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/)
-- Node.js 20.19+ on Node 20, or 22.12+, and npm for React development
+- Node.js 20.19+ on Node 20, or 22.12+, and npm
 
 ### Local development
 
@@ -60,19 +41,16 @@ uv run python scripts/dev.py
 
 Open [http://127.0.0.1:8000/expenses/](http://127.0.0.1:8000/expenses/) and sign in. Use the Django URL as shown (not `localhost`). Django serves pages and the session-protected API; Vite serves development assets and refresh. Ctrl+C stops both servers. Set `DJANGO_PORT` and `VITE_PORT` to use other ports, or set an absolute `DB_PATH` for both setup and the runner to use a different database.
 
-React is the local runner default for Expenses, Categories, CSV Import, Analytics, sign-in, and signup. React and legacy pages use the same Django session. If a session expires while editing, sign in again on the same page to recover the draft. Drafts are not saved across reloads, and signing in never resubmits a write. Django admin is unchanged.
+All app screens use React with Django sessions. If a session expires while editing, sign in again on the same page to recover the draft. Drafts are not saved across reloads, and signing in never resubmits a write. Django admin stays at `/admin/`.
 
-To compare legacy pages locally, restart with `LEGACY_PAGES=1 uv run python scripts/dev.py`. This uses the same database and Django port without Node or Vite; it changes routing only and does not undo or replay writes. Plain Django `runserver` without the local runner also keeps legacy routing.
+This is a **local-only** workflow. Plain Django can still serve admin and the API, but app screens need the Vite dev server. The build below checks the frontend; it does not configure Django to serve production assets.
 
 Focused checks:
 
 ```bash
 work=$(mktemp -d)
 DB_PATH="$work/expenses.sqlite3" uv run pytest --reuse-db \
-  expense_tracker/expenses/test_pilot.py expense_tracker/expenses/test_expense_forms_api.py \
-  expense_tracker/expenses/test_expense_deletion.py expense_tracker/expenses/test_expense_bulk_api.py \
-  expense_tracker/expenses/test_category_sync.py expense_tracker/expenses/test_csv_import.py \
-  expense_tracker/expenses/test_session_api.py
+  expense_tracker/expenses/{test_pilot,test_session_api,test_expense_forms_api,test_expense_deletion,test_expense_bulk_api,test_category_api,test_category_sync,test_csv_import,test_analytics,tests}.py
 npm run build --prefix frontend
 ```
 

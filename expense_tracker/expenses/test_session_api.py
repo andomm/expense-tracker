@@ -184,19 +184,13 @@ def test_account_switch_blocks_stale_tab_and_multipart_without_fresh_csrf(browse
     assert browser.get(expenses, {"month": "all"}).json()["rows"] == []
 
 
-def test_legacy_auth_shares_session_and_reports_explicit_logout(browser, settings):
-    settings.LEGACY_PAGES = True
-    user = User.objects.create_user(username="legacy-wallet", password=PASSWORD)
+def test_post_only_page_logout_ends_api_session_and_sets_marker(browser):
+    user = User.objects.create_user(username="page-logout-wallet", password=PASSWORD)
     before = session(browser)
-    response = browser.post(
-        reverse("login"),
-        {
-            "username": user.username,
-            "password": PASSWORD,
-            "csrfmiddlewaretoken": before["csrf_token"],
-        },
+    response = auth_post(
+        browser, "login", {"username": user.username, "password": PASSWORD}, before["csrf_token"]
     )
-    assert response.url == reverse("expense_list")
+    assert response.status_code == 200
     current = session(browser)
     assert current["user"]["id"] == user.pk
     assert browser.get(reverse("logout")).status_code == 405
@@ -210,18 +204,17 @@ def test_legacy_auth_shares_session_and_reports_explicit_logout(browser, setting
 
 
 @pytest.mark.parametrize("page", ["login", "signup"])
-def test_auth_routes_default_to_react_only_for_local_gets(browser, settings, page):
-    settings.DEBUG = True
-    settings.LEGACY_PAGES = settings.LOCAL_REACT_DEV = False
+def test_auth_pages_are_read_only_react_hosts(browser, page):
     url = reverse(page)
-    assert "app-config" not in browser.get(url).text
-    settings.LOCAL_REACT_DEV = True
-    response = browser.get(url)
-    assert "app-config" in response.text
+    response = browser.get(url, {"next": "//example.com"})
+    assert response.status_code == 200
+    assert response.context["app"]["screen"] == page
+    assert response.context["app"]["next"] == reverse("expense_list")
     assert "no-store" in response.headers["Cache-Control"]
-    assert "app-config" not in browser.get(reverse("admin:login")).text
+    assert browser.head(url).status_code == 200
     assert browser.post(url).status_code == 403
-    settings.LEGACY_PAGES = True
-    assert "app-config" not in browser.get(url).text
-    settings.LEGACY_PAGES = settings.DEBUG = False
-    assert "app-config" not in browser.get(url).text
+    token = session(browser)["csrf_token"]
+    assert browser.post(url, {"csrfmiddlewaretoken": token}).status_code == 405
+    admin_login = browser.get(reverse("admin:login"))
+    assert admin_login.templates[0].name == "admin/login.html"
+    assert "app-config" not in admin_login.text

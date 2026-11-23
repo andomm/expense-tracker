@@ -148,6 +148,15 @@ def test_token_is_bound_to_original_session(
     assert post(writer, "delete", {"token": token}).json() == {"affected_count": 1}
 
 
+def test_explicit_confirmation_rejects_empty_selection(writer, expense):
+    kept = expense()
+
+    response = post(writer, "confirm", {"ids": []})
+
+    assert response.status_code == 400
+    assert Expense.objects.filter(pk=kept.pk).exists()
+
+
 def test_explicit_scope_and_invalid_destination_do_not_partially_write(
     writer, other, expense
 ):
