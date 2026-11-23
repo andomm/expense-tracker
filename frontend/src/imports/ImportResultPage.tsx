@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { displayDate, euro } from "@/expenses/read"
 import { useRead } from "@/lib/api"
-import { ReadFailure, SignInNotice, type AppUrls, type CsvImportRoutes } from "@/Shell"
+import { ReadFailure, type AppUrls, type CsvImportRoutes } from "@/Shell"
 import { LoadingImport } from "./UploadPage"
 
 const totals = [
@@ -82,7 +82,6 @@ export function ImportResultPage({ routes, urls, userId }: {
 }) {
   const { result, retry } = useRead<{ result: Report | null }>(routes.latestApi, userId)
   if (result.state === "loading") return <LoadingImport result />
-  if (result.state === "error" && result.status === 401) return <SignInNotice login={urls.login} csvImport />
   return (
     <div className="max-w-4xl space-y-4 sm:space-y-5">
       <div className="flex flex-wrap gap-2">

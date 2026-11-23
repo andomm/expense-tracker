@@ -2,13 +2,14 @@ import { AlertTriangle } from "lucide-react"
 import { AlertDialog } from "radix-ui"
 import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react"
 
+import { useProtectedActive } from "@/auth/access"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Field, Messages } from "@/components/ui/form-field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import { ApiError, readJson, useRead, writeJson, type FieldErrors, type Session } from "@/lib/api"
-import { ReadFailure, SignInNotice, type AppUrls, type CategoryActionRoutes } from "@/Shell"
+import { ApiError, useRead, writeJson, type FieldErrors, type Session } from "@/lib/api"
+import { ReadFailure, type AppUrls, type CategoryActionRoutes } from "@/Shell"
 
 import { LoadingCategories } from "./CategoriesPage"
 
@@ -25,16 +26,16 @@ type Props = {
   urls: AppUrls
   userId: number
   session: Session
-  onSessionChange: (session: Session | null) => void
 }
 
-type Failure = { kind: "rejected" | "check-session" | "unknown" | "missing"; message: string; fields?: FieldErrors }
-type Action = { kind: "save"; draft: Draft } | { kind: "delete" } | { kind: "session" }
+type Failure = { kind: "rejected" | "unknown" | "missing"; message: string; fields?: FieldErrors }
+type Action = { kind: "save"; draft: Draft } | { kind: "delete" }
 
-function useCategoryWrite({ routes, screen, urls, userId, session, onSessionChange }: Props) {
+function useCategoryWrite({ routes, screen, urls, userId, session }: Props) {
+  const active = useProtectedActive()
   const request = useRef<AbortController | null>(null)
   const leaving = useRef(false)
-  const [pending, setPending] = useState<"write" | "session" | null>(null)
+  const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const deleting = screen === "category-delete"
   useEffect(() => () => request.current?.abort(), [])
@@ -45,45 +46,25 @@ function useCategoryWrite({ routes, screen, urls, userId, session, onSessionChan
     else window.location.assign(urls.categories)
   }
 
-  async function checkSession(signal: AbortSignal) {
-    setPending("session")
-    try {
-      const current = await readJson<Session>(urls.sessionApi, signal)
-      if (signal.aborted) return
-      if (current.user?.id !== userId) {
-        onSessionChange(null)
-        return
-      }
-      onSessionChange(current)
-      setFailure({ kind: "rejected", message: deleting
-        ? "Deletion was blocked. Your session is ready. Review the category and confirm again if you still want to delete it."
-        : "Save was blocked. Your session is ready. Review your entries and choose Save category again." })
-    } catch {
-      if (!signal.aborted) setFailure({ kind: "check-session", message: "Could not check your session. Nothing was sent again. Check your session or cancel." })
-    }
-  }
-
   async function run(action: Action) {
-    if (request.current) return
+    if (request.current || !active) return
     const controller = new AbortController()
     const { signal } = controller
     request.current = controller
     setFailure(null)
+    setPending(true)
     try {
-      if (action.kind === "session") {
-        await checkSession(signal)
-        return
-      }
-      setPending("write")
       const options = { csrfToken: session.csrf_token, userId, signal }
       if (action.kind === "delete") await writeJson(routes.writeApi, { ...options, method: "DELETE" })
       else await writeJson(routes.writeApi, { ...options, method: screen === "category-add" ? "POST" : "PUT", body: action.draft })
       if (!signal.aborted) goBack(true)
     } catch (error) {
       if (signal.aborted) return
-      if (error instanceof ApiError && error.status === 401) onSessionChange(null)
-      else if (error instanceof ApiError && error.needsSessionCheck) await checkSession(signal)
-      else if (error instanceof ApiError && error.status === 404) {
+      if (error instanceof ApiError && error.needsSessionCheck) {
+        setFailure({ kind: "rejected", message: deleting
+          ? "Deletion was blocked. Review the category and confirm again if you still want to delete it."
+          : "Save was blocked. Review your entries and choose Save category again." })
+      } else if (error instanceof ApiError && error.status === 404) {
         setFailure({ kind: "missing", message: "This category is no longer available. Check Categories." })
       } else if (error instanceof ApiError && error.status < 500) {
         setFailure({ kind: "rejected", message: error.message || "The request was rejected.", fields: error.body?.fields })
@@ -93,7 +74,7 @@ function useCategoryWrite({ routes, screen, urls, userId, session, onSessionChan
     } finally {
       if (!signal.aborted && !leaving.current) {
         request.current = null
-        setPending(null)
+        setPending(false)
       }
     }
   }
@@ -108,7 +89,6 @@ export function CategoryActionPage(props: Props) {
   const deleting = props.screen === "category-delete"
   if (result.state === "loading") return <LoadingCategories />
   if (result.state === "error") {
-    if (result.status === 401) return <SignInNotice login={props.urls.login} categories form={!deleting} deletion={deleting} />
     return <div className="grid justify-items-start gap-3">
       {result.status === 404 ? <p className="notice" role="alert">This category is no longer available.</p> :
         <ReadFailure title="Could not open this category page" message={result.message} retry={retry} />}
@@ -132,7 +112,6 @@ function Feedback({ write, form, checkUrl, hide }: {
     <Messages errors={failure.fields?.__all__} />
     {failure.kind === "unknown" && checkUrl && <a className="font-bold underline" href={checkUrl}
       target="_blank" rel="noopener">Check categories in a new tab</a>}
-    {failure.kind === "check-session" && <Button type="button" variant="outline" onClick={() => void write.run({ kind: "session" })}>Check session</Button>}
   </div>
 }
 
@@ -140,6 +119,8 @@ function CategoryEditor({ category, ...props }: Props & { category: CategoryDeta
   const { name, category_type, parent_id, keywords } = category
   const [draft, setDraft] = useState<Draft>({ name, category_type, parent_id, keywords })
   const [discard, setDiscard] = useState(false)
+  const active = useProtectedActive()
+  useEffect(() => { if (!active) setDiscard(false) }, [active])
   const [changed, setChanged] = useState<Set<keyof Draft>>(new Set())
   const form = useRef<HTMLFormElement>(null)
   const write = useCategoryWrite(props)
@@ -162,7 +143,7 @@ function CategoryEditor({ category, ...props }: Props & { category: CategoryDeta
     setChanged((current) => new Set([...current, key, ...(key === "parent_id" ? ["category_type" as const] : [])]))
   }
   const errors = (field: keyof Draft) => changed.has(field) ? undefined : failure?.fields?.[field]
-  const blocked = Boolean(pending || failure?.kind === "check-session" || failure?.kind === "missing")
+  const blocked = pending || failure?.kind === "missing"
   const editedAllErrors = failure?.fields && Object.keys(failure.fields).every((key) => changed.has(key as keyof Draft))
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -171,7 +152,7 @@ function CategoryEditor({ category, ...props }: Props & { category: CategoryDeta
     void write.run({ kind: "save", draft })
   }
 
-  return <AlertDialog.Root open={discard} onOpenChange={setDiscard}>
+  return <AlertDialog.Root open={active && discard} onOpenChange={setDiscard}>
     <Card className="max-w-2xl gap-4 py-4 shadow-none sm:py-5">
       <CardHeader className="gap-2 px-4 sm:px-5">
         <h2 className="font-extrabold">Category details</h2>
@@ -207,7 +188,7 @@ function CategoryEditor({ category, ...props }: Props & { category: CategoryDeta
           </fieldset>
           <div className="flex flex-wrap gap-2">
             <Button type="submit" className="h-11" disabled={blocked}>
-              {pending === "write" ? "Saving…" : pending === "session" ? "Checking session…" : "Save category"}
+              {pending ? "Saving…" : "Save category"}
             </Button>
             <AlertDialog.Trigger asChild>
               <Button type="button" variant="outline" className="h-11" disabled={Boolean(pending)}
@@ -216,7 +197,7 @@ function CategoryEditor({ category, ...props }: Props & { category: CategoryDeta
               </Button>
             </AlertDialog.Trigger>
           </div>
-          {pending && <p role="status" className="sr-only">{pending === "write" ? "Saving category" : "Checking your session"}</p>}
+          {pending && <p role="status" className="sr-only">Saving category</p>}
         </form>
       </CardContent>
     </Card>
@@ -262,10 +243,10 @@ function DeleteCategory({ category, ...props }: Props & { category: CategoryDeta
             {failure?.kind === "unknown" || failure?.kind === "missing" ? "Check categories" : "Cancel"}
           </Button>
           <Button type="submit" variant="destructive" disabled={blocked} className="h-11 dark:bg-destructive dark:text-background dark:hover:bg-destructive/90">
-            {pending === "write" ? "Deleting…" : pending === "session" ? "Checking session…" : "Delete category"}
+            {pending ? "Deleting…" : "Delete category"}
           </Button>
         </div>
-        {pending && <p role="status" className="sr-only">{pending === "write" ? "Deleting category" : "Checking your session"}</p>}
+        {pending && <p role="status" className="sr-only">Deleting category</p>}
       </form>
     </CardContent>
   </Card>

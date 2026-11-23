@@ -4,8 +4,8 @@ import { useEffect, useRef, useState, type MouseEvent } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useRead } from "@/lib/api"
-import { ReadFailure, SignInNotice, type AppUrls } from "@/Shell"
+import { useRead, type Session } from "@/lib/api"
+import { ReadFailure, type AppUrls } from "@/Shell"
 
 import { BulkExpenseActions } from "./BulkExpenseActions"
 import { ExpenseFilters } from "./ExpenseFilters"
@@ -166,14 +166,13 @@ export function LoadingExpenses() {
   )
 }
 
-type PageProps = { urls: AppUrls; notices: string[]; userId: number }
+type PageProps = { urls: AppUrls; notices: string[]; userId: number; session: Session }
 type ScopedSelection = { key: string; value: BulkSelection }
 
-export function ExpensesPage({ urls, notices, userId }: PageProps) {
+export function ExpensesPage({ urls, notices, userId, session }: PageProps) {
   const [search, setSearch] = useState(window.location.search)
   const [selected, setSelected] = useState<ScopedSelection | null>(null)
   const [success, setSuccess] = useState("")
-  const [signedOut, setSignedOut] = useState(false)
   const [restores, setRestores] = useState(0)
   const request = listRequestUrl(urls.expensesApi, search)
 
@@ -202,18 +201,16 @@ export function ExpensesPage({ urls, notices, userId }: PageProps) {
     setSearch(window.location.search)
   }
 
-  if (signedOut) return <SignInNotice login={urls.login} />
   return <ExpensesResults key={`${userId}:${restores}:${request}`} request={request} urls={urls}
     notices={success ? [...notices, success] : notices} userId={userId} navigate={navigate}
-    selected={selected} setSelected={setSelected} onSuccess={setSuccess}
-    onSessionChanged={() => { setSelected(null); setSuccess(""); setSignedOut(true) }} />
+    selected={selected} setSelected={setSelected} onSuccess={setSuccess} session={session} />
 }
 
 function ExpensesResults({ urls, notices, userId, request, navigate, selected, setSelected,
-  onSuccess, onSessionChanged }: PageProps & {
+  onSuccess, session }: PageProps & {
   request: string; navigate: (event: MouseEvent<HTMLAnchorElement>) => void
   selected: ScopedSelection | null; setSelected: (value: ScopedSelection | null) => void
-  onSuccess: (message: string) => void; onSessionChanged: () => void
+  onSuccess: (message: string) => void
 }) {
   const { result, retry } = useRead<ExpenseList>(request, userId)
   const focusAfterRefresh = useRef(false)
@@ -236,9 +233,7 @@ function ExpensesResults({ urls, notices, userId, request, navigate, selected, s
     return <LoadingExpenses />
   }
   if (result.state === "error") {
-    return result.status === 401
-      ? <SignInNotice login={urls.login} />
-      : <ReadFailure message={result.message} retry={retry} reset={urls.expenses} />
+    return <ReadFailure message={result.message} retry={retry} reset={urls.expenses} />
   }
 
   const list = result.data
@@ -277,8 +272,8 @@ function ExpensesResults({ urls, notices, userId, request, navigate, selected, s
           <div id="activity" className="results-header" tabIndex={-1}>
             <p role="status">{resultLabel}</p>
           </div>
-          <BulkExpenseActions urls={urls} userId={userId} list={list} selection={selection}
-            onSelection={setSelection} onSessionChanged={onSessionChanged} onRefresh={refresh}
+          <BulkExpenseActions urls={urls} userId={userId} csrfToken={session.csrf_token} list={list} selection={selection}
+            onSelection={setSelection} onRefresh={refresh}
             onSuccess={(message) => { setSelected(null); onSuccess(message); refresh() }} />
           {count ? <ExpenseRows list={list} context={context} selection={rowSelection} /> : (
             <div className="notice">

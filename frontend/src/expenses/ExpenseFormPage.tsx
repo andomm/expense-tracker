@@ -2,12 +2,13 @@ import { AlertTriangle, Plus, X } from "lucide-react"
 import { AlertDialog } from "radix-ui"
 import { useEffect, useRef, useState, type FormEvent } from "react"
 
+import { useProtectedActive } from "@/auth/access"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Field, Messages } from "@/components/ui/form-field"
 import { Input } from "@/components/ui/input"
-import { ApiError, readJson, useRead, writeJson, type FieldErrors, type Session } from "@/lib/api"
-import { ReadFailure, SignInNotice, type AppUrls, type FormRoutes } from "@/Shell"
+import { ApiError, useRead, writeJson, type FieldErrors, type Session } from "@/lib/api"
+import { ReadFailure, type AppUrls, type FormRoutes } from "@/Shell"
 
 import { ChoiceInput, ExpenseFields } from "./ExpenseFields"
 import { emptyDraft, saveFields, useAmountPreview, type Draft, type ExpenseDetail, type FormOptions, type MainFields } from "./form"
@@ -18,7 +19,6 @@ type FormPageProps = {
   urls: AppUrls
   userId: number
   session: Session
-  onSessionChange: (session: Session | null) => void
 }
 
 export function LoadingExpenseForm() {
@@ -26,15 +26,12 @@ export function LoadingExpenseForm() {
 }
 
 export function ExpenseFormPage(props: FormPageProps) {
-  const { routes, urls, userId } = props
+  const { routes, userId } = props
   const options = useRead<FormOptions>(routes.optionsApi, userId)
   const detail = useRead<ExpenseDetail>(routes.detailApi, userId)
   const reads = routes.detailApi ? [options, detail] : [options]
   const back = <Button asChild variant="outline"><a href={routes.returnUrl}>Back to expenses</a></Button>
 
-  if (reads.some(({ result }) => result.state === "error" && result.status === 401)) {
-    return <SignInNotice login={urls.login} form />
-  }
   if (detail.result.state === "error" && detail.result.status === 404) {
     return <div className="notice" role="alert"><h2>This expense is no longer available</h2>{back}</div>
   }
@@ -81,16 +78,17 @@ function AmountPreviewCard({ preview, pending }: { preview: ReturnType<typeof us
   )
 }
 
-type Failure = { kind: "validation" | "rejected" | "unknown" | "check" | "missing"; message: string }
+type Failure = { kind: "validation" | "rejected" | "unknown" | "missing"; message: string }
 type Split = Draft["splits"][number]
 
-function ExpenseEditor({ routes, urls, userId, session, onSessionChange, initial, options }: FormPageProps & {
+function ExpenseEditor({ routes, urls, userId, session, initial, options }: FormPageProps & {
   initial: Draft; options: FormOptions
 }) {
+  const active = useProtectedActive()
   const [draft, setDraft] = useState(initial)
   const [errors, setErrors] = useState<FieldErrors>({})
   const [failure, setFailure] = useState<Failure | null>(null)
-  const [pending, setPending] = useState<"save" | "session" | null>(null)
+  const [pending, setPending] = useState(false)
   const [leaveTarget, setLeaveTarget] = useState<string | null>(null)
   const request = useRef<AbortController | null>(null)
   const leave = useRef(false)
@@ -100,9 +98,10 @@ function ExpenseEditor({ routes, urls, userId, session, onSessionChange, initial
   const addSplitButton = useRef<HTMLButtonElement>(null)
   const splitKey = useRef(0)
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial)
-  const preview = useAmountPreview(draft, routes.previewApi, session.csrf_token, userId, onSessionChange, Boolean(pending))
+  const preview = useAmountPreview(draft, routes.previewApi, session.csrf_token, userId, pending || !active)
 
   useEffect(() => () => request.current?.abort(), [])
+  useEffect(() => { if (!active) setLeaveTarget(null) }, [active])
   useEffect(() => {
     if (!failure) return
     const firstInvalid = failure.kind === "validation"
@@ -150,33 +149,14 @@ function ExpenseEditor({ routes, urls, userId, session, onSessionChange, initial
     requestAnimationFrame(() => addSplitButton.current?.focus())
   }
 
-  async function checkSession(signal: AbortSignal) {
-    try {
-      const current = await readJson<Session>(urls.sessionApi, signal)
-      if (signal.aborted) return
-      if (current.user?.id !== userId) {
-        onSessionChange(null)
-        return
-      }
-      onSessionChange(current)
-      setFailure({ kind: "rejected", message: "The save was blocked. Your session is ready now. Review your entries and choose Save expense again." })
-    } catch {
-      if (!signal.aborted) setFailure({ kind: "check", message: "Could not confirm your session. Nothing was sent again. Check your session before trying to save." })
-    }
-  }
-
-  async function run(action: "save" | "session") {
-    if (request.current) return
+  async function run() {
+    if (request.current || !active) return
     const controller = new AbortController()
     const { signal } = controller
     request.current = controller
-    setPending(action)
+    setPending(true)
     setFailure(null)
     try {
-      if (action === "session") {
-        await checkSession(signal)
-        return
-      }
       setErrors({})
       await writeJson(routes.detailApi ?? urls.expensesApi, {
         method: routes.detailApi ? "PUT" : "POST", csrfToken: session.csrf_token,
@@ -188,11 +168,8 @@ function ExpenseEditor({ routes, urls, userId, session, onSessionChange, initial
       return
     } catch (error) {
       if (signal.aborted) return
-      if (error instanceof ApiError && error.status === 401) {
-        onSessionChange(null)
-      } else if (error instanceof ApiError && error.needsSessionCheck) {
-        setPending("session")
-        await checkSession(signal)
+      if (error instanceof ApiError && error.needsSessionCheck) {
+        setFailure({ kind: "rejected", message: "The save was blocked. Review your entries and choose Save expense again." })
       } else if (error instanceof ApiError && error.status === 422) {
         const fields = error.body?.fields ?? {}
         setErrors(fields)
@@ -210,14 +187,14 @@ function ExpenseEditor({ routes, urls, userId, session, onSessionChange, initial
     } finally {
       if (!signal.aborted && !leave.current) {
         request.current = null
-        setPending(null)
+        setPending(false)
       }
     }
   }
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (failure?.kind !== "check" && failure?.kind !== "missing") void run("save")
+    if (failure?.kind !== "missing") void run()
   }
 
   function navigate(url: string) {
@@ -236,7 +213,6 @@ function ExpenseEditor({ routes, urls, userId, session, onSessionChange, initial
   }
 
   const missing = failure?.kind === "missing"
-  const checking = failure?.kind === "check"
   const showFailure = failure && (failure.kind !== "validation" || Object.keys(errors).length > 0)
   const form = (
     <form ref={formElement} aria-label={routes.detailApi ? "Edit expense" : "Add expense"} onSubmit={save} noValidate>
@@ -245,7 +221,6 @@ function ExpenseEditor({ routes, urls, userId, session, onSessionChange, initial
         <Messages errors={errors.form} />
         {failure.kind === "unknown" && <a className="text-sm font-bold underline" href={routes.returnUrl}
           target="_blank" rel="noopener">Check expenses in a new tab</a>}
-        {checking && <Button type="button" variant="outline" onClick={() => void run("session")}>Check session</Button>}
       </div>}
       <fieldset className="expense-editor" disabled={Boolean(pending)}>
         <Card className="gap-4 py-4 shadow-none sm:py-5">
@@ -285,15 +260,13 @@ function ExpenseEditor({ routes, urls, userId, session, onSessionChange, initial
         </Card>
         <AmountPreviewCard preview={preview} pending={Boolean(pending)} />
         <div className="expense-actions">
-          <Button type="submit" disabled={checking || missing || Boolean(pending)}>
-            {pending === "save" ? "Saving…" : pending === "session" ? "Checking session…" : "Save expense"}
+          <Button type="submit" disabled={missing || pending}>
+            {pending ? "Saving…" : "Save expense"}
           </Button>
           <Button type="button" variant="outline" onClick={(event) => prepareToLeave(routes.returnUrl, event.currentTarget)}>
             Cancel
           </Button>
-          {pending && <span role="status" className="sr-only">
-            {pending === "save" ? "Saving expense" : "Checking your session"}
-          </span>}
+          {pending && <span role="status" className="sr-only">Saving expense</span>}
         </div>
       </fieldset>
     </form>
@@ -301,7 +274,7 @@ function ExpenseEditor({ routes, urls, userId, session, onSessionChange, initial
 
   const deleteUrl = routes.deleteUrl
   return (
-    <AlertDialog.Root open={leaveTarget !== null} onOpenChange={(open) => { if (!open) setLeaveTarget(null) }}>
+    <AlertDialog.Root open={active && leaveTarget !== null} onOpenChange={(open) => { if (!open) setLeaveTarget(null) }}>
       {form}
       {deleteUrl && !missing && (
         <section aria-labelledby="expense-delete-title" className="mt-6 grid justify-items-start gap-2 border-t pt-4">

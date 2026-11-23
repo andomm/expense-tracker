@@ -12,6 +12,51 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_safe
 
 from .models import Category, Expense
+from .session_api import safe_return_url
+
+
+def _session_routes() -> dict[str, str]:
+    return {
+        "login": reverse("login"),
+        "signup": reverse("signup"),
+        "sessionApi": reverse("api:session"),
+        "loginApi": reverse("api:session-login"),
+        "signupApi": reverse("api:session-signup"),
+        "logoutApi": reverse("api:session-logout"),
+    }
+
+
+def _react_enabled() -> bool:
+    return settings.DEBUG and settings.LOCAL_REACT_DEV and not settings.LEGACY_PAGES
+
+
+def _render_host(request: HttpRequest, app: dict, title: str) -> HttpResponse:
+    return render(
+        request,
+        "react_host.html",
+        {"vite_origin": settings.VITE_DEV_ORIGIN, "app": app, "title": title},
+    )
+
+
+def migrated_auth_page(screen: str, legacy: Callable[..., HttpResponse]):
+    @wraps(legacy)
+    @never_cache
+    def view(request: HttpRequest) -> HttpResponse:
+        if not (
+            _react_enabled() and settings.AUTH_REACT_CANDIDATE and request.method in {"GET", "HEAD"}
+        ):
+            return legacy(request)
+        return _render_host(
+            request,
+            {
+                "screen": screen,
+                "urls": _session_routes(),
+                "next": safe_return_url(request.GET.get("next")),
+            },
+            "Sign in" if screen == "login" else "Create account",
+        )
+
+    return view
 
 
 TITLES = {
@@ -56,9 +101,7 @@ def react_host(
             "analytics": reverse("expenses_per_month"),
             "categories": reverse("category_list"),
             "upload": reverse("upload_csv"),
-            "login": reverse("login"),
-            "logout": reverse("logout"),
-            "sessionApi": reverse("api:session"),
+            **_session_routes(),
             "expensesApi": reverse("api:expenses"),
         },
     }
@@ -114,15 +157,7 @@ def react_host(
             else None,
         }
 
-    return render(
-        request,
-        "react_host.html",
-        {
-            "vite_origin": settings.VITE_DEV_ORIGIN,
-            "app": app,
-            "title": TITLES[screen],
-        },
-    )
+    return _render_host(request, app, TITLES[screen])
 
 
 def _list_context_url(
@@ -142,7 +177,7 @@ def migrated_page(screen: str, legacy: Callable[..., HttpResponse]):
 
     @wraps(legacy)
     def view(request: HttpRequest, **kwargs) -> HttpResponse:
-        if settings.DEBUG and settings.LOCAL_REACT_DEV and not settings.LEGACY_PAGES:
+        if _react_enabled():
             return react_host(request, screen, **kwargs)
         return legacy(request, **kwargs)
 

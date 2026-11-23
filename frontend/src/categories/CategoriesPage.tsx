@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { useRead } from "@/lib/api"
-import { ReadFailure, SignInNotice, type CategoryListRoutes } from "@/Shell"
+import { ReadFailure, type CategoryListRoutes } from "@/Shell"
 
 type CategoryEntry = {
   id: number
@@ -86,14 +86,13 @@ function SyncCard({ url, resultUrl }: { url: string; resultUrl: string }) {
   )
 }
 
-export function CategoriesPage({ routes, login, userId }: {
-  routes: CategoryListRoutes; login: string; userId: number
+export function CategoriesPage({ routes, userId }: {
+  routes: CategoryListRoutes; userId: number
 }) {
   const { result, retry } = useRead<{ categories: CategoryEntry[] }>(routes.api, userId)
   if (result.state === "loading") return <LoadingCategories />
   if (result.state === "error") {
-    return result.status === 401 ? <SignInNotice login={login} categories /> :
-      <ReadFailure title="Could not load categories" message={result.message} retry={retry} />
+    return <ReadFailure title="Could not load categories" message={result.message} retry={retry} />
   }
   const tree: Tree = new Map()
   for (const entry of result.data.categories) {

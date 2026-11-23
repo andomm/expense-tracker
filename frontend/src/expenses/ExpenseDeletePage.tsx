@@ -4,8 +4,8 @@ import { AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { ApiError, readJson, useRead, writeJson, type Session } from "@/lib/api"
-import { ReadFailure, SignInNotice, type AppUrls, type DeletionRoutes } from "@/Shell"
+import { ApiError, useRead, writeJson, type Session } from "@/lib/api"
+import { ReadFailure, type DeletionRoutes } from "@/Shell"
 
 import type { ExpenseDetail } from "./form"
 import { displayDate, euro } from "./read"
@@ -14,10 +14,8 @@ type Preview = ExpenseDetail | { count: number }
 type Props = {
   routes: DeletionRoutes
   allExpenses: boolean
-  urls: AppUrls
   userId: number
   session: Session
-  onSessionChange: (session: Session | null) => void
 }
 
 export function LoadingExpenseDeletion() {
@@ -25,11 +23,10 @@ export function LoadingExpenseDeletion() {
 }
 
 export function ExpenseDeletePage(props: Props) {
-  const { routes, userId, urls } = props
+  const { routes, userId } = props
   const { result, retry } = useRead<Preview>(routes.api, userId)
   if (result.state === "loading") return <LoadingExpenseDeletion />
   if (result.state === "error") {
-    if (result.status === 401) return <SignInNotice login={urls.login} deletion />
     return <div className="grid justify-items-start gap-3">
       {result.status === 404 ? <p className="notice" role="alert">This expense is no longer available.</p> :
         <ReadFailure title="Could not load deletion details" message={result.message} retry={retry} />}
@@ -39,13 +36,13 @@ export function ExpenseDeletePage(props: Props) {
   return <DeleteConfirmation {...props} preview={result.data} />
 }
 
-type Failure = { kind: "rejected" | "unknown" | "check" | "missing"; message: string }
+type Failure = { kind: "rejected" | "unknown" | "missing"; message: string }
 
-function DeleteConfirmation({ routes, allExpenses, urls, userId, session, onSessionChange, preview }: Props & {
+function DeleteConfirmation({ routes, allExpenses, userId, session, preview }: Props & {
   preview: Preview
 }) {
   const [confirmation, setConfirmation] = useState("")
-  const [pending, setPending] = useState<"delete" | "session" | null>(null)
+  const [pending, setPending] = useState(false)
   const [failure, setFailure] = useState<Failure | null>(null)
   const request = useRef<AbortController | null>(null)
   const feedback = useRef<HTMLParagraphElement>(null)
@@ -55,38 +52,18 @@ function DeleteConfirmation({ routes, allExpenses, urls, userId, session, onSess
   const count = "count" in preview ? preview.count : null
   const label = allExpenses ? "Delete all expenses" : "Delete expense"
   const mustLeave = failure?.kind === "unknown" || failure?.kind === "missing"
-  const canDelete = !pending && !mustLeave && failure?.kind !== "check" &&
+  const canDelete = !pending && !mustLeave &&
     (allExpenses ? count !== null && count > 0 && confirmation === "DELETE" : count === null)
 
-  async function checkSession(signal: AbortSignal) {
-    try {
-      const current = await readJson<Session>(urls.sessionApi, signal)
-      if (signal.aborted) return
-      if (current.user?.id !== userId) {
-        onSessionChange(null)
-        return
-      }
-      onSessionChange(current)
-      setConfirmation("")
-      setFailure({ kind: "rejected", message: "The deletion was blocked. Your session is ready. Review and confirm again if you still want to delete." })
-    } catch {
-      if (!signal.aborted) setFailure({ kind: "check", message: "Could not confirm your session. No deletion was sent again. Check your session or cancel." })
-    }
-  }
-
-  async function run(action: "delete" | "session") {
+  async function run() {
     if (request.current) return
     const controller = new AbortController()
     const { signal } = controller
     request.current = controller
-    setPending(action)
+    setPending(true)
     setFailure(null)
     let navigating = false
     try {
-      if (action === "session") {
-        await checkSession(signal)
-        return
-      }
       const options = { csrfToken: session.csrf_token, userId, signal }
       await writeJson(routes.api, allExpenses
         ? { ...options, method: "POST", body: { confirmation } }
@@ -97,11 +74,9 @@ function DeleteConfirmation({ routes, allExpenses, urls, userId, session, onSess
       }
     } catch (error) {
       if (signal.aborted) return
-      if (error instanceof ApiError && error.status === 401) {
-        onSessionChange(null)
-      } else if (error instanceof ApiError && error.needsSessionCheck) {
-        setPending("session")
-        await checkSession(signal)
+      if (error instanceof ApiError && error.needsSessionCheck) {
+        setConfirmation("")
+        setFailure({ kind: "rejected", message: "The deletion was blocked. Review and confirm again if you still want to delete." })
       } else if (error instanceof ApiError && error.status === 404) {
         setFailure({ kind: "missing", message: "This expense is no longer available. Check your expenses." })
       } else if (error instanceof ApiError && error.status < 500) {
@@ -112,14 +87,14 @@ function DeleteConfirmation({ routes, allExpenses, urls, userId, session, onSess
     } finally {
       if (!signal.aborted && !navigating) {
         request.current = null
-        setPending(null)
+        setPending(false)
       }
     }
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (canDelete) void run("delete")
+    if (canDelete) void run()
   }
 
   return (
@@ -151,7 +126,7 @@ function DeleteConfirmation({ routes, allExpenses, urls, userId, session, onSess
           {allExpenses && count !== null && count > 0 && <div className="grid gap-1.5">
             <label htmlFor="delete-confirmation" className="text-sm font-bold">Type DELETE to confirm</label>
             <Input id="delete-confirmation" name="confirmation" autoComplete="off" autoCapitalize="off" spellCheck={false}
-              className="h-11" value={confirmation} disabled={Boolean(pending) || mustLeave || failure?.kind === "check"}
+              className="h-11" value={confirmation} disabled={pending || mustLeave}
               onChange={(event) => setConfirmation(event.target.value)} />
           </div>}
           {failure && <p ref={feedback} tabIndex={-1} role="alert" className="text-sm font-bold text-destructive">{failure.message}</p>}
@@ -160,14 +135,12 @@ function DeleteConfirmation({ routes, allExpenses, urls, userId, session, onSess
               <Button asChild variant="outline" className="h-11">
                 <a href={routes.returnUrl}>{mustLeave ? "Check expenses" : "Cancel"}</a>
               </Button>}
-            {failure?.kind === "check" ? <Button type="button" variant="outline" className="h-11"
-              onClick={() => void run("session")}>Check session</Button> :
-              !mustLeave && count !== 0 && <Button type="submit" variant="destructive" disabled={!canDelete}
-                className="h-11 dark:bg-destructive dark:text-background dark:hover:bg-destructive/90">
-                {pending === "delete" ? "Deleting…" : pending === "session" ? "Checking session…" : label}
-              </Button>}
+            {!mustLeave && count !== 0 && <Button type="submit" variant="destructive" disabled={!canDelete}
+              className="h-11 dark:bg-destructive dark:text-background dark:hover:bg-destructive/90">
+              {pending ? "Deleting…" : label}
+            </Button>}
           </div>
-          {pending && <span role="status" className="sr-only">{pending === "delete" ? "Deleting expenses" : "Checking your session"}</span>}
+          {pending && <span role="status" className="sr-only">Deleting expenses</span>}
         </form>
       </CardContent>
     </Card>

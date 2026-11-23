@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react"
+import { useEffect, useEffectEvent, useState } from "react"
 
-import { ApiError, writeJson, type Session } from "@/lib/api"
+import { writeJson } from "@/lib/api"
 
 type Split = { amount: string; category_id: number | null }
 export type Draft = {
@@ -38,32 +38,36 @@ export function saveFields(draft: Draft) {
 
 type PreviewResult = { state: "idle" | "loading" | "error" } | { state: "ready"; data: AmountPreview }
 
-export function useAmountPreview(draft: Draft, url: string, csrfToken: string, userId: number,
-  onSessionChange: (session: Session | null) => void, paused: boolean): PreviewResult {
+export function useAmountPreview(draft: Draft, url: string, csrfToken: string, userId: number, paused: boolean): PreviewResult {
   const body = draft.amount.trim() ? JSON.stringify(amountFields(draft)) : ""
-  const [last, setLast] = useState<{ body: string; token: string; result: PreviewResult }>()
+  const [last, setLast] = useState<{ body: string; result: PreviewResult }>()
+
+  // A refreshed token must not resend even the read-only preview POST.
+  const requestPreview = useEffectEvent(async (value: string, signal: AbortSignal) => {
+    if (paused) {
+      setLast({ body: value, result: { state: "error" } })
+      return
+    }
+    try {
+      const data = await writeJson<AmountPreview>(url, {
+        method: "POST", csrfToken, userId, body: JSON.parse(value), signal,
+      })
+      if (!signal.aborted) setLast({ body: value, result: { state: "ready", data } })
+    } catch {
+      if (!signal.aborted) setLast({ body: value, result: { state: "error" } })
+    }
+  })
 
   useEffect(() => {
-    if (!body || paused) return
+    if (!body) return
     const controller = new AbortController()
-    const timer = window.setTimeout(async () => {
-      try {
-        const data = await writeJson<AmountPreview>(url, {
-          method: "POST", csrfToken, userId, body: JSON.parse(body), signal: controller.signal,
-        })
-        if (!controller.signal.aborted) setLast({ body, token: csrfToken, result: { state: "ready", data } })
-      } catch (error) {
-        if (controller.signal.aborted) return
-        if (error instanceof ApiError && error.status === 401) onSessionChange(null)
-        else setLast({ body, token: csrfToken, result: { state: "error" } })
-      }
-    }, 250)
+    const timer = window.setTimeout(() => void requestPreview(body, controller.signal), 250)
     return () => {
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [body, url, csrfToken, userId, onSessionChange, paused])
+  }, [body, url, userId])
 
   if (!body) return { state: "idle" }
-  return last?.body === body && last.token === csrfToken ? last.result : { state: "loading" }
+  return last?.body === body ? last.result : { state: "loading" }
 }

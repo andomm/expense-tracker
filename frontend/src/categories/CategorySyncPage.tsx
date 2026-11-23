@@ -3,9 +3,9 @@ import { useEffect, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { ApiError, readJson, useRead, writeJson, type Session } from "@/lib/api"
+import { ApiError, useRead, writeJson, type Session } from "@/lib/api"
 import { displayDate, euro } from "@/expenses/read"
-import { ReadFailure, SignInNotice, type AppUrls, type CategorySyncRoutes } from "@/Shell"
+import { ReadFailure, type AppUrls, type CategorySyncRoutes } from "@/Shell"
 
 const groups = [
   { key: "newly_categorized", title: "Newly categorized", description: "These expenses had no category before this run." },
@@ -43,9 +43,8 @@ export function LoadingSync({ result = false }: { result?: boolean }) {
   return <div className="notice" role="status"><p>{result ? "Loading latest sync result…" : "Loading sync review…"}</p></div>
 }
 
-export function CategorySyncPage({ routes, urls, userId, session, onSessionChange }: {
+export function CategorySyncPage({ routes, urls, userId, session }: {
   routes: CategorySyncRoutes; urls: AppUrls; userId: number; session: Session
-  onSessionChange: (value: Session | null) => void
 }) {
   const [state, setState] = useState<"ready" | "pending" | "rejected" | "unknown">("ready")
   const inFlight = useRef<AbortController | null>(null)
@@ -67,18 +66,7 @@ export function CategorySyncPage({ routes, urls, userId, session, onSessionChang
       // A CSRF rejection is known not to have written. All other uncertain
       // failures stop here; the results link is read-only.
       if (error instanceof ApiError && error.needsSessionCheck) {
-        try {
-          const current = await readJson<Session>(urls.sessionApi, signal)
-          if (signal.aborted) return
-          if (current.user?.id !== userId) {
-            onSessionChange(null)
-            return
-          }
-          onSessionChange(current)
-          setState("rejected")
-        } catch {
-          if (!signal.aborted) setState("unknown")
-        }
+        setState("rejected")
       } else {
         setState("unknown")
       }
@@ -179,7 +167,6 @@ export function CategorySyncResultPage({ routes, urls, userId }: {
 }) {
   const { result, retry } = useRead<{ result: Report | null }>(routes.latestApi, userId)
   if (result.state === "loading") return <LoadingSync result />
-  if (result.state === "error" && result.status === 401) return <SignInNotice login={urls.login} sync />
   const report = result.state === "ready" ? result.data.result : null
   const noChanges = report && !report.counts.newly_categorized && !report.counts.upgraded
   return (

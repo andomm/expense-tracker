@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react"
 import { BarChart3, Layers3, Moon, Sun, Tags, Upload, WalletCards } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import type { Session } from "@/lib/api"
+import type { SessionUrls } from "@/auth/AuthPage"
 
 export type FormRoutes = {
   detailApi: string | null
@@ -14,8 +14,8 @@ export type FormRoutes = {
 
 export type DeletionRoutes = { api: string; returnUrl: string }
 
-export type AppUrls = Record<"expenses" | "addExpense" | "deleteAllExpenses" | "analytics" | "categories" | "upload"
-  | "login" | "logout" | "sessionApi" | "expensesApi", string>
+export type AppUrls = SessionUrls & Record<"expenses" | "addExpense" | "deleteAllExpenses" | "analytics" | "categories" | "upload"
+  | "expensesApi", string>
 
 export type AppConfig = { urls: AppUrls; userId: number } & (
   | { screen: "expenses"; notices: string[] }
@@ -50,15 +50,7 @@ const titles = {
   "csv-import-result": "CSV import results",
 }
 
-export function signInHref(login: string) {
-  return `${login}?${new URLSearchParams({ next: location.pathname + location.search })}`
-}
-
-export function Shell({ config, session, children }: {
-  config: AppConfig
-  session: Session | null
-  children: ReactNode
-}) {
+export function AppHeader({ config, onSignOut }: { config?: AppConfig; onSignOut?: () => void }) {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"))
   const links = [
     { label: "Expenses", route: "expenses", icon: WalletCards },
@@ -77,12 +69,15 @@ export function Shell({ config, session, children }: {
     <>
       <a className="skip-link" href="#main">Skip to content</a>
       <header className="app-header">
-        <div className="frame header-inner">
-          <a className="brand" href={config.urls.expenses}>
+        <div className={config ? "frame header-inner" : "frame flex min-h-16 items-center justify-between gap-2 py-2"}>
+          {config ? <a className="brand" href={config.urls.expenses}>
             <Layers3 size={23} aria-hidden="true" />
             <span>Expense <strong>Tracker</strong></span>
-          </a>
-          <nav aria-label="Main navigation">
+          </a> : <span className="brand">
+            <Layers3 size={23} aria-hidden="true" />
+            <span>Expense <strong>Tracker</strong></span>
+          </span>}
+          {config && <nav aria-label="Main navigation">
             {links.map(({ label, route, icon: Icon }) => (
               <a key={route} href={config.urls[route]}
                 aria-current={config.screen === route || (route === "upload" && "csvImport" in config) ? "page" : undefined}>
@@ -90,54 +85,27 @@ export function Shell({ config, session, children }: {
                 {label}
               </a>
             ))}
-          </nav>
+          </nav>}
           <div className="header-actions">
             <Button type="button" variant="ghost" size="icon-lg" onClick={toggleTheme}
               aria-label="Dark mode" aria-pressed={dark}>
               {dark ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
             </Button>
-            {session?.user && (
-              <form action={config.urls.logout} method="post">
-                <input type="hidden" name="csrfmiddlewaretoken" value={session.csrf_token} />
-                <Button type="submit" variant="ghost">Sign out</Button>
-              </form>
-            )}
+            {onSignOut && <Button type="button" variant="ghost" onClick={onSignOut}>Sign out</Button>}
           </div>
         </div>
       </header>
-      <main id="main" className="frame app-main" tabIndex={-1}>
-        <div className="page-title">
-          <div>
-            <p className="eyebrow">Personal ledger</p>
-            <h1>{titles[config.screen]}</h1>
-          </div>
-        </div>
-        {children}
-      </main>
     </>
   )
 }
 
-export function SignInNotice({ login, form = false, deletion = false, categories = false, sync = false, csvImport = false, analytics = false }: {
-  login: string; form?: boolean; deletion?: boolean; categories?: boolean; sync?: boolean; csvImport?: boolean; analytics?: boolean
-}) {
-  return (
-    <div className="notice" role="alert">
-      <h2>{csvImport ? "Sign in to use CSV import" : sync ? "Sign in to use category sync" : analytics ? "Sign in to see Analytics" : `Sign in to see your ${categories ? "categories" : "expenses"}`}</h2>
-      <p>{csvImport
-        ? "Your session ended or changed. Sign in to reopen this page. No file will be uploaded automatically."
-        : sync
-        ? "Your session ended or changed. Sign in to reopen this page. Sync will not start automatically."
-        : deletion
-        ? "Your session ended or changed. Sign in to review the deletion again. Nothing will be sent automatically."
-        : form
-        ? "Your session ended or changed. Sign in again to reopen this page. Unsaved changes will not be restored or sent."
-        : categories || analytics
-        ? "Your session ended or changed. Sign in again to reopen this page."
-        : "Your session ended or changed. Sign in again to return to these filters."}</p>
-      <Button asChild><a href={signInHref(login)}>Sign in</a></Button>
+export function PageTitle({ screen }: { screen: AppConfig["screen"] }) {
+  return <div className="page-title">
+    <div>
+      <p className="eyebrow">Personal ledger</p>
+      <h1>{titles[screen]}</h1>
     </div>
-  )
+  </div>
 }
 
 export function ReadFailure({ message, retry, reset, title = "Could not load expenses" }: {

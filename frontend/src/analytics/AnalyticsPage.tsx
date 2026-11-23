@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react"
 
 import { euro } from "@/expenses/read"
-import { ApiError, readJson } from "@/lib/api"
-import { ReadFailure, SignInNotice } from "@/Shell"
+import { readJson } from "@/lib/api"
+import { ReadFailure } from "@/Shell"
 
 import { CategoryBreakdown, MonthNavigation } from "./CategoryBreakdown"
 import { ChartCard, ChartEmpty, ValuesTable } from "./ChartCard"
@@ -20,10 +20,9 @@ type Snapshot = {
   selection: Selection
   data?: AnalyticsData
   failed?: boolean
-  sessionEnded?: boolean
 }
 
-export default function AnalyticsPage({ api, login, userId }: { api: string; login: string; userId: number }) {
+export default function AnalyticsPage({ api, userId }: { api: string; userId: number }) {
   const [selection, select] = useState<Selection>(() => ({ month: selectedMonth() }))
   const [snapshot, setSnapshot] = useState<Snapshot>()
 
@@ -41,13 +40,9 @@ export default function AnalyticsPage({ api, login, userId }: { api: string; log
       // Month navigation updates only the selected breakdown. Reload the page
       // to refresh the all-time report as a whole.
       setSnapshot((old) => ({ selection, data: old?.data ? { ...old.data, category: data.category } : data }))
-    }).catch((error: unknown) => {
+    }).catch(() => {
       if (controller.signal.aborted) return
-      if (error instanceof ApiError && error.needsSessionCheck) {
-        setSnapshot({ selection, sessionEnded: true })
-      } else {
-        setSnapshot((old) => ({ selection, data: old?.data, failed: true }))
-      }
+      setSnapshot((old) => ({ selection, data: old?.data, failed: true }))
     })
     return () => controller.abort()
   }, [api, selection, userId])
@@ -61,7 +56,6 @@ export default function AnalyticsPage({ api, login, userId }: { api: string; log
 
   const busy = snapshot?.selection !== selection
   const retry = () => select({ ...selection })
-  if (snapshot?.sessionEnded) return <SignInNotice login={login} analytics />
   const data = snapshot?.data
   if (!data) {
     return busy ? <LoadingAnalytics /> : <ReadFailure title="Could not load Analytics" message="" retry={retry} />

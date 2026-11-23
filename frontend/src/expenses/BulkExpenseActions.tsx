@@ -5,7 +5,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { ApiError } from "@/lib/api"
 import type { AppUrls } from "@/Shell"
 
-import { BulkSessionChanged, bulkWriter, emptySelection, expensesLabel,
+import { bulkWriter, emptySelection, expensesLabel,
   type BulkAction, type BulkSelection, type Confirmation } from "./bulk"
 import type { ExpenseList } from "./read"
 
@@ -14,16 +14,16 @@ type Failure = { message: string; next?: "check" | "reconfirm"; field?: string }
 type Props = {
   urls: AppUrls
   userId: number
+  csrfToken: string
   list: ExpenseList
   selection: BulkSelection
   onSelection: (selection: BulkSelection) => void
   onSuccess: (message: string) => void
-  onSessionChanged: () => void
   onRefresh: () => void
 }
 
 export function BulkExpenseActions({
-  urls, userId, list, selection, onSelection, onSuccess, onSessionChanged, onRefresh,
+  urls, userId, csrfToken, list, selection, onSelection, onSuccess, onRefresh,
 }: Props) {
   const [action, setAction] = useState<BulkAction | null>(null)
   const [pending, setPending] = useState(false)
@@ -50,8 +50,7 @@ export function BulkExpenseActions({
       await work(controller.signal)
     } catch (error) {
       if (controller.signal.aborted) return
-      if (error instanceof BulkSessionChanged) onSessionChanged()
-      else onError(error)
+      onError(error)
     } finally {
       if (!controller.signal.aborted) setPending(false)
       inFlight.current = null
@@ -61,7 +60,7 @@ export function BulkExpenseActions({
   function selectMatches() {
     setNotice("")
     void run(async (signal) => {
-      const send = await bulkWriter(urls, userId, signal)
+      const send = bulkWriter(urls, userId, csrfToken, signal)
       const result = await send<Confirmation>("confirm", { filters: list.filters })
       if (signal.aborted) return
       onSelection(result.token
@@ -80,7 +79,7 @@ export function BulkExpenseActions({
     setFailure(null)
     let applying = false
     void run(async (signal) => {
-      const send = await bulkWriter(urls, userId, signal)
+      const send = bulkWriter(urls, userId, csrfToken, signal)
       const ids = matching ? undefined : [...selection.ids]
       const token = matching ? selection.token : (await send<Confirmation>("confirm", { ids })).token
       applying = true

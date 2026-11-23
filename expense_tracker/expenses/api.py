@@ -1,6 +1,5 @@
 from django.core.paginator import Paginator
 from django.http import HttpRequest, JsonResponse
-from django.middleware.csrf import get_token
 from django.urls import reverse
 
 from .api_http import api_error, json_endpoint
@@ -15,19 +14,6 @@ from .expense_list import (
 from .forms import SortForm
 
 PAGE_SIZE = 50
-
-
-@json_endpoint("GET", login_required=False)
-def session_status(request: HttpRequest) -> JsonResponse:
-    user = request.user
-    return JsonResponse(
-        {
-            "user": {"id": user.pk, "username": user.get_username()}
-            if user.is_authenticated
-            else None,
-            "csrf_token": get_token(request),
-        }
-    )
 
 
 def _row_json(row: ExpenseListRow) -> dict:

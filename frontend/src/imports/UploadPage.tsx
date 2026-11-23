@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Field } from "@/components/ui/form-field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import { ApiError, readJson, writeMultipart, type FieldErrors, type Session } from "@/lib/api"
+import { ApiError, writeMultipart, type FieldErrors, type Session } from "@/lib/api"
 import type { AppUrls, CsvImportRoutes } from "@/Shell"
 
 type UploadState = { kind: "ready" | "pending" | "unknown" }
@@ -16,9 +16,8 @@ export function LoadingImport({ result = false }: { result?: boolean }) {
   return <div className="notice" role="status"><p>{result ? "Loading latest import result…" : "Loading CSV upload…"}</p></div>
 }
 
-export function UploadPage({ routes, urls, userId, session, onSessionChange }: {
+export function UploadPage({ routes, urls, userId, session }: {
   routes: CsvImportRoutes; urls: AppUrls; userId: number; session: Session
-  onSessionChange: (value: Session | null) => void
 }) {
   const [state, setState] = useState<UploadState>({ kind: "ready" })
   const [hasFile, setHasFile] = useState(false)
@@ -59,18 +58,7 @@ export function UploadPage({ routes, urls, userId, session, onSessionChange }: {
     } catch (error) {
       if (signal.aborted) return
       if (error instanceof ApiError && error.needsSessionCheck) {
-        try {
-          const current = await readJson<Session>(urls.sessionApi, signal)
-          if (signal.aborted) return
-          if (current.user?.id !== userId) {
-            onSessionChange(null)
-            return
-          }
-          onSessionChange(current)
-          setState({ kind: "rejected", message: "Import did not start. The session was checked. Select Import expenses to try again." })
-        } catch {
-          if (!signal.aborted) setState({ kind: "rejected", message: "Import did not start. Reload the page to check your session before trying again." })
-        }
+        setState({ kind: "rejected", message: "Import did not start. Review your file, then select Import expenses to try again." })
       } else if (error instanceof ApiError && (
         (error.status === 422 && error.body?.code === "validation_failed") ||
         (error.status === 400 && error.body?.code === "invalid_request")

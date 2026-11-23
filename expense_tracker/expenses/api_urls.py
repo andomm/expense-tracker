@@ -2,10 +2,14 @@ from django.urls import path
 
 from . import analytics_api, api, category_api, category_sync_api, csv_import_api, expense_api
 from . import expense_bulk_api as bulk
+from . import session_api
 
 app_name = "api"
 urlpatterns = [
-    path("session/", api.session_status, name="session"),
+    path("session/", session_api.session_status, name="session"),
+    path("session/login/", session_api.sign_in, name="session-login"),
+    path("session/signup/", session_api.sign_up, name="session-signup"),
+    path("session/logout/", session_api.sign_out, name="session-logout"),
     path("analytics/", analytics_api.analytics, name="analytics"),
     path("categories/", category_api.categories, name="categories"),
     path("categories/form-options/", category_api.form_options, name="category-form-options"),
