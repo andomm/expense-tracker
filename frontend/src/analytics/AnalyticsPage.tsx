@@ -9,7 +9,6 @@ import { ChartCard, ChartEmpty, ValuesTable } from "./ChartCard"
 import { LoadingAnalytics } from "./LoadingAnalytics"
 import { CashFlow, DailySpending, MonthlySpending } from "./SeriesCharts"
 import type { AnalyticsData } from "./data"
-import "./analytics.css"
 
 function selectedMonth() {
   return new URLSearchParams(location.search).getAll("month").at(-1) ?? ""

@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./analytics/analytics.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -108,8 +109,8 @@
   .filters [data-slot="input"], .filters [data-slot="native-select"] { @apply bg-background/60; }
   .results-header { @apply py-3 text-sm font-semibold text-muted-foreground; }
   .expense-rows { @apply space-y-2; }
-  .date-group { @apply grid gap-2 border-t py-3 sm:grid-cols-[7rem_minmax(0,1fr)]; }
-  .date-group h3 { @apply pt-2 text-xs font-extrabold tracking-wide text-muted-foreground uppercase; }
+  .date-group { @apply grid grid-cols-1 gap-2 border-t py-3; }
+  .date-group h3 { @apply text-xs font-extrabold tracking-wide text-muted-foreground uppercase; }
   .expense-row { @apply grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-xl border bg-card px-3 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-3 sm:px-4; }
   .receipt-icon { @apply hidden size-8 place-items-center rounded-lg bg-accent text-primary sm:grid; }
   .row-description { @apply min-w-0 space-y-0.5 wrap-anywhere; }

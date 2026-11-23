@@ -9,6 +9,17 @@
             document.documentElement.classList.add("dark");
         }
     </script>
+    <!-- Paint the theme before Vite loads the app stylesheet. -->
+    <style>
+        :root {
+            color-scheme: light;
+            background-color: var(--background, #eff3ed);
+        }
+        :root.dark {
+            color-scheme: dark;
+            background-color: var(--background, #121e19);
+        }
+    </style>
     <!-- Django sends the document, so Vite cannot inject this preamble. -->
     <script type="module">
         import RefreshRuntime from "{{ vite_origin }}/@react-refresh";
