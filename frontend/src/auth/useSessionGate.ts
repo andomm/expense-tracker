@@ -79,13 +79,17 @@ export function useSessionGate({ urls, userId }: AppConfig, keepDraft: boolean) 
       if (document.visibilityState === "visible") revalidate()
       else freeze()
     }
-    function restore(event: PageTransitionEvent) {
-      if (event.persisted) revalidate()
-    }
     function sessionRejected() {
       // A check that began before this rejection may have read the old cookies.
       freeze()
       revalidate()
+    }
+    function restore(event: PageTransitionEvent) {
+      if (!event.persisted) return
+      // Re-read cached lists, charts, and confirmations after leaving the page.
+      // Editors stay mounted so a verified owner can resume an unsaved draft.
+      if (!keepDraft) setOwnerSession(null)
+      sessionRejected()
     }
     if (typeof BroadcastChannel !== "undefined") {
       channel.current = new BroadcastChannel(sessionChannelName)
@@ -115,7 +119,7 @@ export function useSessionGate({ urls, userId }: AppConfig, keepDraft: boolean) 
       window.removeEventListener("pageshow", restore)
       window.removeEventListener(PROTECTED_SESSION_REJECTED, sessionRejected)
     }
-  }, [revalidate])
+  }, [keepDraft, revalidate])
 
   async function signOut() {
     if (gate.kind !== "active" || logout.current) return

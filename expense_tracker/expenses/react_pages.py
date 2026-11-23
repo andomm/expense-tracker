@@ -42,9 +42,7 @@ def migrated_auth_page(screen: str, legacy: Callable[..., HttpResponse]):
     @wraps(legacy)
     @never_cache
     def view(request: HttpRequest) -> HttpResponse:
-        if not (
-            _react_enabled() and settings.AUTH_REACT_CANDIDATE and request.method in {"GET", "HEAD"}
-        ):
+        if not (_react_enabled() and request.method in {"GET", "HEAD"}):
             return legacy(request)
         return _render_host(
             request,

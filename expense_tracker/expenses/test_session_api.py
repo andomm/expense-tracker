@@ -210,15 +210,18 @@ def test_legacy_auth_shares_session_and_reports_explicit_logout(browser, setting
 
 
 @pytest.mark.parametrize("page", ["login", "signup"])
-def test_auth_candidate_only_dispatches_opted_in_local_gets(browser, settings, page):
-    settings.DEBUG = settings.LOCAL_REACT_DEV = True
+def test_auth_routes_default_to_react_only_for_local_gets(browser, settings, page):
+    settings.DEBUG = True
+    settings.LEGACY_PAGES = settings.LOCAL_REACT_DEV = False
     url = reverse(page)
     assert "app-config" not in browser.get(url).text
-    settings.AUTH_REACT_CANDIDATE = True
+    settings.LOCAL_REACT_DEV = True
     response = browser.get(url)
     assert "app-config" in response.text
     assert "no-store" in response.headers["Cache-Control"]
     assert "app-config" not in browser.get(reverse("admin:login")).text
     assert browser.post(url).status_code == 403
     settings.LEGACY_PAGES = True
+    assert "app-config" not in browser.get(url).text
+    settings.LEGACY_PAGES = settings.DEBUG = False
     assert "app-config" not in browser.get(url).text

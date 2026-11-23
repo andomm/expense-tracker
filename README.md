@@ -60,7 +60,7 @@ uv run python scripts/dev.py
 
 Open [http://127.0.0.1:8000/expenses/](http://127.0.0.1:8000/expenses/) and sign in. Use the Django URL as shown (not `localhost`). Django serves pages and the session-protected API; Vite serves development assets and refresh. Ctrl+C stops both servers. Set `DJANGO_PORT` and `VITE_PORT` to use other ports, or set an absolute `DB_PATH` for both setup and the runner to use a different database.
 
-React is the local runner default for Expenses (list, bulk actions, add/edit, and delete confirmations), Categories (tree, add/edit, delete confirmation, sync review, and sync results), and CSV Import (upload and latest result). Analytics and sign-in still use Django templates.
+React is the local runner default for Expenses, Categories, CSV Import, Analytics, sign-in, and signup. React and legacy pages use the same Django session. If a session expires while editing, sign in again on the same page to recover the draft. Drafts are not saved across reloads, and signing in never resubmits a write. Django admin is unchanged.
 
 To compare legacy pages locally, restart with `LEGACY_PAGES=1 uv run python scripts/dev.py`. This uses the same database and Django port without Node or Vite; it changes routing only and does not undo or replay writes. Plain Django `runserver` without the local runner also keeps legacy routing.
 
@@ -71,7 +71,8 @@ work=$(mktemp -d)
 DB_PATH="$work/expenses.sqlite3" uv run pytest --reuse-db \
   expense_tracker/expenses/test_pilot.py expense_tracker/expenses/test_expense_forms_api.py \
   expense_tracker/expenses/test_expense_deletion.py expense_tracker/expenses/test_expense_bulk_api.py \
-  expense_tracker/expenses/test_category_sync.py expense_tracker/expenses/test_csv_import.py
+  expense_tracker/expenses/test_category_sync.py expense_tracker/expenses/test_csv_import.py \
+  expense_tracker/expenses/test_session_api.py
 npm run build --prefix frontend
 ```
 
